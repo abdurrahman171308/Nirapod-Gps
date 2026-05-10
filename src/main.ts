@@ -18,9 +18,18 @@ async function bootstrap() {
   app.use(helmet());
   app.use(cookieParser());
 
-  const corsOrigins = configService.get<string>('CORS_ORIGINS') || '*';
+  const corsOrigins = configService.get<string>('CORS_ORIGINS') || '';
+  const allowedOrigins = corsOrigins
+    ? corsOrigins.split(',').map((o) => o.trim())
+    : [];
+
   app.enableCors({
-    origin: corsOrigins === '*' ? '*' : corsOrigins.split(','),
+    origin: (origin, callback) => {
+      // Allow requests with no origin (server-to-server, curl, Swagger)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin '${origin}' not allowed`));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
