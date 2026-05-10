@@ -53,8 +53,12 @@ export class GeofencesController {
   @ApiParam({ name: 'id' })
   @ApiOperation({ summary: 'Update geofence (Admin or device owner)' })
   @ApiResponse({ status: 200, description: 'Geofence updated' })
-  async update(@Param('id') id: string, @Body() dto: UpdateGeofenceDto) {
-    return this.geofencesService.update(id, dto);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateGeofenceDto,
+    @CurrentUser() user: UserContext,
+  ) {
+    return this.geofencesService.update(id, dto, user);
   }
 
   @Delete(':id')

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -66,8 +67,23 @@ export class GeofencesService {
       .exec();
   }
 
-  async update(id: string, dto: UpdateGeofenceDto) {
+  async update(id: string, dto: UpdateGeofenceDto, user: UserContext) {
     this.validateGeofenceShape(dto);
+
+    if (user.role !== Role.ADMIN) {
+      const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
+      const geofence = await this.geofenceModel.findById(id).lean().exec();
+      if (!geofence) {
+        throw new NotFoundException('Geofence not found');
+      }
+      const hasAccess =
+        geofence.deviceImeis.length === 0 ||
+        geofence.deviceImeis.some((imei) => assignedImeis.includes(imei));
+      if (!hasAccess) {
+        throw new ForbiddenException('You do not have permission to update this geofence');
+      }
+    }
+
     const geofence = await this.geofenceModel
       .findByIdAndUpdate(id, dto, { new: true })
       .exec();
