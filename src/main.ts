@@ -20,13 +20,17 @@ async function bootstrap() {
 
   const corsOrigins = configService.get<string>('CORS_ORIGINS') || '';
   const allowedOrigins = corsOrigins
-    ? corsOrigins.split(',').map((o) => o.trim())
+    ? corsOrigins.split(',').map((o) => o.trim()).filter(Boolean)
     : [];
+
+  const appUrl = configService.get<string>('APP_URL') || '';
 
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (server-to-server, curl, Swagger)
+      // Allow requests with no origin (curl, mobile apps, server-to-server)
       if (!origin) return callback(null, true);
+      // Allow the server's own origin (Swagger UI same-site requests)
+      if (appUrl && origin === appUrl.replace(/\/$/, '')) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       callback(new Error(`CORS: origin '${origin}' not allowed`));
     },
