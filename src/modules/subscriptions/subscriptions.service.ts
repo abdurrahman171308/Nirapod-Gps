@@ -215,10 +215,12 @@ export class SubscriptionsService implements OnModuleInit {
     const deviceCount = resolvedDevices.length;
     const subscribedDeviceIds = resolvedDevices.map((d) => d._id as Types.ObjectId);
 
-    const baseAmount =
-      billingCycle === BillingCycle.YEARLY
-        ? deviceCount * plan.priceYearly
-        : deviceCount * plan.priceMonthly;
+    const defaultDuration = billingCycle === BillingCycle.YEARLY ? 12 : 1;
+    const durationMonths = dto.durationMonths ?? defaultDuration;
+
+    const pricePerUnit =
+      billingCycle === BillingCycle.YEARLY ? plan.priceYearly : plan.priceMonthly;
+    const baseAmount = deviceCount * pricePerUnit * durationMonths;
 
     let discountAmount = 0;
     let appliedCouponCode: string | undefined;
@@ -232,11 +234,7 @@ export class SubscriptionsService implements OnModuleInit {
     const amountPaid = Math.max(0, baseAmount - discountAmount);
     const startDate = new Date();
     const endDate = new Date(startDate);
-    if (billingCycle === BillingCycle.YEARLY) {
-      endDate.setFullYear(endDate.getFullYear() + 1);
-    } else {
-      endDate.setMonth(endDate.getMonth() + 1);
-    }
+    endDate.setMonth(endDate.getMonth() + durationMonths);
 
     await this.subscriptionModel.updateMany(
       { userId: new Types.ObjectId(userId), status: { $ne: SubscriptionStatus.ACTIVE } },
@@ -275,6 +273,7 @@ export class SubscriptionsService implements OnModuleInit {
       discountAmount,
       couponCode: appliedCouponCode,
       status: PaymentStatus.SUCCESS,
+      notes: dto.notes,
     });
 
     return subscription;
