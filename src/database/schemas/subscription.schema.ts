@@ -39,6 +39,9 @@ export class Subscription {
   @Prop({ required: true, min: 0 })
   deviceCount: number;
 
+  @Prop({ type: [Types.ObjectId], ref: 'Device', default: [] })
+  subscribedDeviceIds: Types.ObjectId[];
+
   @Prop({ required: true, min: 0 })
   pricePerDevice: number;
 

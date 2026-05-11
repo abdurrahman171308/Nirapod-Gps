@@ -35,6 +35,8 @@ export const IGNITION_STATE_FRESH_MS = ONLINE_THRESHOLD_MS;
 export interface UserContext {
   userId: string;
   role: Role;
+  /** Device IDs the user's active subscription covers. Set by SubscriptionGuard. Admin is undefined (all access). */
+  subscribedDeviceIds?: string[];
 }
 
 @Injectable()
@@ -79,9 +81,13 @@ export class DevicesService {
   async findAll(user: UserContext): Promise<any[]> {
     const filter: any = {};
 
-    // Regular users can only see devices assigned to them
     if (user.role !== Role.ADMIN) {
       filter.assignedUserId = new Types.ObjectId(user.userId);
+
+      // Further restrict to only subscribed devices when the subscription has explicit device selections
+      if (user.subscribedDeviceIds && user.subscribedDeviceIds.length > 0) {
+        filter._id = { $in: user.subscribedDeviceIds.map((id) => new Types.ObjectId(id)) };
+      }
     }
 
     const devices = await this.deviceModel
@@ -133,8 +139,9 @@ export class DevicesService {
   }
 
   /**
-   * Validates if a user has access to a device
-   * Admin can access all devices, users can only access assigned devices
+   * Validates if a user has access to a device.
+   * Admin: all access.
+   * User: must be assigned to the device AND the device must be in their active subscription.
    */
   validateDeviceAccess(device: any, user: UserContext): void {
     if (user.role === Role.ADMIN) {
@@ -145,8 +152,19 @@ export class DevicesService {
       typeof device.assignedUserId === 'object' && device.assignedUserId?._id
         ? device.assignedUserId._id.toString()
         : device.assignedUserId?.toString();
+
     if (!assignedUserId || assignedUserId !== user.userId) {
       throw new ForbiddenException('You do not have access to this device');
+    }
+
+    // Enforce subscription-level device restriction
+    if (user.subscribedDeviceIds && user.subscribedDeviceIds.length > 0) {
+      const deviceId = (device._id as Types.ObjectId).toString();
+      if (!user.subscribedDeviceIds.includes(deviceId)) {
+        throw new ForbiddenException(
+          'This device is not included in your active subscription.',
+        );
+      }
     }
   }
 

@@ -44,27 +44,36 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
-    const { user } = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest();
+    const { user } = request;
 
     if (!user) {
       throw new UnauthorizedException('Unauthorized: Please log in to continue.');
     }
 
-    // Admins bypass subscription check
+    // Admins bypass subscription check and have access to all devices
     if (user.role === Role.ADMIN) {
       return true;
     }
 
-    const subscription = await this.subscriptionModel.findOne({
-      userId: new Types.ObjectId(user.userId),
-      status: SubscriptionStatus.ACTIVE,
-    });
+    const subscription = await this.subscriptionModel
+      .findOne({
+        userId: new Types.ObjectId(user.userId),
+        status: SubscriptionStatus.ACTIVE,
+      })
+      .select('endDate subscribedDeviceIds')
+      .lean();
 
     if (!subscription || subscription.endDate < new Date()) {
       throw new ForbiddenException(
         'An active subscription is required to access this resource.',
       );
     }
+
+    // Merge subscribed device IDs into request.user so @CurrentUser() carries them to services
+    request.user.subscribedDeviceIds = (subscription.subscribedDeviceIds ?? []).map(
+      (id: Types.ObjectId) => id.toString(),
+    );
 
     return true;
   }

@@ -15,7 +15,7 @@ import { Coupon, CouponDocument, DiscountType } from '../../database/schemas/cou
 import { PaymentRecord, PaymentRecordDocument, PaymentStatus } from '../../database/schemas/payment-record.schema';
 import { User, UserDocument } from '../../database/schemas/user.schema';
 import { Device, DeviceDocument } from '../../database/schemas/device.schema';
-import { CreateSubscriptionDto } from './dto';
+import { CreateSubscriptionDto, AdminCreateSubscriptionDto, AdminRenewSubscriptionDto } from './dto';
 
 @Injectable()
 export class SubscriptionsService implements OnModuleInit {
@@ -114,6 +114,7 @@ export class SubscriptionsService implements OnModuleInit {
     const subscription = await this.subscriptionModel
       .findOne({ userId: new Types.ObjectId(userId) })
       .populate('planId', '-__v')
+      .populate('subscribedDeviceIds', 'imei name plateNumber isOnline lastSeenAt')
       .lean();
 
     if (!subscription) {
@@ -126,6 +127,7 @@ export class SubscriptionsService implements OnModuleInit {
   async getCheckoutSummary(
     userId: string,
     planName: PlanName,
+    deviceIds?: string[],
     couponCode?: string,
   ) {
     const activeSubscription = await this.subscriptionModel
@@ -143,7 +145,9 @@ export class SubscriptionsService implements OnModuleInit {
     }
 
     const billingCycle = this.getBillingCycleFromPlanName(planName);
-    const deviceCount = await this.getAssignedDeviceCount(userId);
+    const resolvedDevices = await this.resolveUserDevices(userId, deviceIds);
+    const deviceCount = resolvedDevices.length;
+
     const cycleAmount =
       billingCycle === BillingCycle.YEARLY
         ? deviceCount * plan.priceYearly
@@ -153,11 +157,7 @@ export class SubscriptionsService implements OnModuleInit {
     let coupon: Record<string, unknown> | null = null;
 
     if (couponCode) {
-      const validatedCoupon = await this.validateCoupon(
-        couponCode,
-        planName,
-        cycleAmount,
-      );
+      const validatedCoupon = await this.validateCoupon(couponCode, planName, cycleAmount);
       discountAmount = validatedCoupon.discountAmount ?? 0;
       coupon = validatedCoupon;
     }
@@ -166,6 +166,12 @@ export class SubscriptionsService implements OnModuleInit {
       planName,
       billingCycle,
       deviceCount,
+      selectedDevices: resolvedDevices.map((d) => ({
+        _id: d._id,
+        imei: d.imei,
+        name: d.name,
+        plateNumber: d.plateNumber,
+      })),
       pricePerDevice: this.pricePerDevice,
       baseAmount: cycleAmount,
       discountAmount,
@@ -176,7 +182,7 @@ export class SubscriptionsService implements OnModuleInit {
       canSubscribe: deviceCount > 0,
       message:
         deviceCount > 0
-          ? `Subscription total is based on ${deviceCount} assigned device(s).`
+          ? `Subscription total is based on ${deviceCount} selected device(s).`
           : 'No devices are assigned to this account yet. An admin must assign at least one device before checkout.',
       activeSubscription,
     };
@@ -198,12 +204,16 @@ export class SubscriptionsService implements OnModuleInit {
     }
 
     const billingCycle = this.getBillingCycleFromPlanName(dto.planName);
-    const deviceCount = await this.getAssignedDeviceCount(userId);
-    if (deviceCount < 1) {
+    const resolvedDevices = await this.resolveUserDevices(userId, dto.deviceIds);
+
+    if (resolvedDevices.length < 1) {
       throw new BadRequestException(
         'No devices are assigned to this account. An admin must assign at least one device before subscribing.',
       );
     }
+
+    const deviceCount = resolvedDevices.length;
+    const subscribedDeviceIds = resolvedDevices.map((d) => d._id as Types.ObjectId);
 
     const baseAmount =
       billingCycle === BillingCycle.YEARLY
@@ -214,17 +224,12 @@ export class SubscriptionsService implements OnModuleInit {
     let appliedCouponCode: string | undefined;
 
     if (dto.couponCode) {
-      const coupon = await this.validateAndApplyCoupon(
-        dto.couponCode,
-        dto.planName,
-        baseAmount,
-      );
+      const coupon = await this.validateAndApplyCoupon(dto.couponCode, dto.planName, baseAmount);
       discountAmount = coupon.discount;
       appliedCouponCode = coupon.code;
     }
 
     const amountPaid = Math.max(0, baseAmount - discountAmount);
-
     const startDate = new Date();
     const endDate = new Date(startDate);
     if (billingCycle === BillingCycle.YEARLY) {
@@ -233,7 +238,6 @@ export class SubscriptionsService implements OnModuleInit {
       endDate.setMonth(endDate.getMonth() + 1);
     }
 
-    // Cancel any old non-active subscription for this user
     await this.subscriptionModel.updateMany(
       { userId: new Types.ObjectId(userId), status: { $ne: SubscriptionStatus.ACTIVE } },
       { status: SubscriptionStatus.CANCELLED },
@@ -249,16 +253,15 @@ export class SubscriptionsService implements OnModuleInit {
       endDate,
       amountPaid,
       deviceCount,
+      subscribedDeviceIds,
       pricePerDevice: this.pricePerDevice,
       baseAmount,
       couponCode: appliedCouponCode,
       discountAmount,
     });
 
-    // Link subscription to user
     await this.userModel.findByIdAndUpdate(userId, { subscriptionId: subscription._id });
 
-    // Record payment
     await this.paymentRecordModel.create({
       userId: new Types.ObjectId(userId),
       subscriptionId: subscription._id,
@@ -266,6 +269,7 @@ export class SubscriptionsService implements OnModuleInit {
       billingCycle,
       amount: amountPaid,
       deviceCount,
+      subscribedDeviceIds,
       pricePerDevice: this.pricePerDevice,
       baseAmount,
       discountAmount,
@@ -274,6 +278,212 @@ export class SubscriptionsService implements OnModuleInit {
     });
 
     return subscription;
+  }
+
+  // ─── Admin: create subscription for any user ──────────────────────────────
+
+  async adminCreateSubscription(dto: AdminCreateSubscriptionDto) {
+    const user = await this.userModel.findById(dto.userId).lean();
+    if (!user) throw new NotFoundException(`User '${dto.userId}' not found.`);
+
+    const existing = await this.subscriptionModel.findOne({
+      userId: new Types.ObjectId(dto.userId),
+      status: SubscriptionStatus.ACTIVE,
+    });
+    if (existing && existing.endDate > new Date()) {
+      throw new ConflictException(
+        'User already has an active subscription. Use the renew endpoint to extend it.',
+      );
+    }
+
+    const plan = await this.planModel.findOne({ name: dto.planName, isActive: true });
+    if (!plan) throw new NotFoundException(`Plan '${dto.planName}' not found.`);
+
+    const devices = await this.validateAdminDeviceIds(dto.userId, dto.deviceIds);
+    const deviceCount = devices.length;
+    const subscribedDeviceIds = devices.map((d) => d._id as Types.ObjectId);
+
+    const billingCycle = this.getBillingCycleFromPlanName(dto.planName);
+    const pricePerUnit =
+      billingCycle === BillingCycle.YEARLY ? plan.priceYearly : plan.priceMonthly;
+    const baseAmount = deviceCount * pricePerUnit * dto.durationMonths;
+
+    let discountAmount = 0;
+    let appliedCouponCode: string | undefined;
+    if (dto.couponCode) {
+      const coupon = await this.validateAndApplyCoupon(dto.couponCode, dto.planName, baseAmount);
+      discountAmount = coupon.discount;
+      appliedCouponCode = coupon.code;
+    }
+
+    const amountPaid = Math.max(0, baseAmount - discountAmount);
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + dto.durationMonths);
+
+    await this.subscriptionModel.updateMany(
+      { userId: new Types.ObjectId(dto.userId), status: { $ne: SubscriptionStatus.ACTIVE } },
+      { status: SubscriptionStatus.CANCELLED },
+    );
+
+    const subscription = await this.subscriptionModel.create({
+      userId: new Types.ObjectId(dto.userId),
+      planId: plan._id,
+      planName: plan.name,
+      status: SubscriptionStatus.ACTIVE,
+      billingCycle,
+      startDate,
+      endDate,
+      amountPaid,
+      deviceCount,
+      subscribedDeviceIds,
+      pricePerDevice: this.pricePerDevice,
+      baseAmount,
+      couponCode: appliedCouponCode,
+      discountAmount,
+    });
+
+    await this.userModel.findByIdAndUpdate(dto.userId, { subscriptionId: subscription._id });
+
+    await this.paymentRecordModel.create({
+      userId: new Types.ObjectId(dto.userId),
+      subscriptionId: subscription._id,
+      planName: plan.name,
+      billingCycle,
+      amount: amountPaid,
+      deviceCount,
+      subscribedDeviceIds,
+      pricePerDevice: this.pricePerDevice,
+      baseAmount,
+      discountAmount,
+      couponCode: appliedCouponCode,
+      status: PaymentStatus.SUCCESS,
+      notes: dto.notes,
+    });
+
+    return subscription;
+  }
+
+  // ─── Admin: renew / extend an existing subscription ───────────────────────
+
+  async adminRenewSubscription(userId: string, dto: AdminRenewSubscriptionDto) {
+    const user = await this.userModel.findById(userId).lean();
+    if (!user) throw new NotFoundException(`User '${userId}' not found.`);
+
+    const subscription = await this.subscriptionModel.findOne({
+      userId: new Types.ObjectId(userId),
+      status: SubscriptionStatus.ACTIVE,
+    });
+
+    if (!subscription) {
+      throw new NotFoundException(
+        'No active subscription found for this user. Use the create endpoint instead.',
+      );
+    }
+
+    let subscribedDeviceIds: Types.ObjectId[];
+    let deviceCount: number;
+
+    if (dto.deviceIds && dto.deviceIds.length > 0) {
+      const devices = await this.validateAdminDeviceIds(userId, dto.deviceIds);
+      subscribedDeviceIds = devices.map((d) => d._id as Types.ObjectId);
+      deviceCount = devices.length;
+    } else {
+      subscribedDeviceIds = (subscription.subscribedDeviceIds ?? []) as Types.ObjectId[];
+      deviceCount = subscription.deviceCount;
+    }
+
+    const plan = await this.planModel.findById(subscription.planId).lean();
+    if (!plan) throw new NotFoundException('Subscription plan not found.');
+
+    const pricePerUnit =
+      subscription.billingCycle === BillingCycle.YEARLY ? plan.priceYearly : plan.priceMonthly;
+    const baseAmount = deviceCount * pricePerUnit * dto.durationMonths;
+
+    let discountAmount = 0;
+    let appliedCouponCode: string | undefined;
+    if (dto.couponCode) {
+      const coupon = await this.validateAndApplyCoupon(
+        dto.couponCode,
+        subscription.planName,
+        baseAmount,
+      );
+      discountAmount = coupon.discount;
+      appliedCouponCode = coupon.code;
+    }
+
+    const amountPaid = Math.max(0, baseAmount - discountAmount);
+
+    // Extend from current endDate if still in the future, otherwise from now
+    const extendFrom = subscription.endDate > new Date() ? subscription.endDate : new Date();
+    const newEndDate = new Date(extendFrom);
+    newEndDate.setMonth(newEndDate.getMonth() + dto.durationMonths);
+
+    subscription.endDate = newEndDate;
+    subscription.deviceCount = deviceCount;
+    subscription.subscribedDeviceIds = subscribedDeviceIds;
+    subscription.amountPaid = subscription.amountPaid + amountPaid;
+    subscription.baseAmount = subscription.baseAmount + baseAmount;
+    subscription.discountAmount = (subscription.discountAmount ?? 0) + discountAmount;
+    if (appliedCouponCode) subscription.couponCode = appliedCouponCode;
+    await subscription.save();
+
+    await this.paymentRecordModel.create({
+      userId: new Types.ObjectId(userId),
+      subscriptionId: subscription._id,
+      planName: subscription.planName,
+      billingCycle: subscription.billingCycle,
+      amount: amountPaid,
+      deviceCount,
+      subscribedDeviceIds,
+      pricePerDevice: this.pricePerDevice,
+      baseAmount,
+      discountAmount,
+      couponCode: appliedCouponCode,
+      status: PaymentStatus.SUCCESS,
+      notes: dto.notes,
+    });
+
+    return subscription;
+  }
+
+  // ─── Admin: device-wise subscription report ───────────────────────────────
+
+  async getSubscriptionReport() {
+    const [totalActive, totalExpired, allSubs] = await Promise.all([
+      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.ACTIVE }),
+      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.EXPIRED }),
+      this.subscriptionModel
+        .find({ status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED] } })
+        .populate('userId', 'email firstName lastName')
+        .populate('subscribedDeviceIds', 'imei name plateNumber isOnline lastSeenAt')
+        .sort({ createdAt: -1 })
+        .select('-__v')
+        .lean(),
+    ]);
+
+    const deviceWise: Record<string, unknown>[] = [];
+    for (const sub of allSubs) {
+      const devices = (sub.subscribedDeviceIds ?? []) as any[];
+      for (const device of devices) {
+        deviceWise.push({
+          device: typeof device === 'object' ? device : { _id: device },
+          user: sub.userId,
+          subscriptionId: sub._id,
+          planName: sub.planName,
+          billingCycle: sub.billingCycle,
+          status: sub.status,
+          startDate: sub.startDate,
+          endDate: sub.endDate,
+        });
+      }
+    }
+
+    return {
+      summary: { totalActive, totalExpired },
+      subscriptions: allSubs,
+      deviceWise,
+    };
   }
 
   async cancelSubscription(userId: string) {
@@ -297,6 +507,7 @@ export class SubscriptionsService implements OnModuleInit {
   async getPaymentHistory(userId: string) {
     return this.paymentRecordModel
       .find({ userId: new Types.ObjectId(userId) })
+      .populate('subscribedDeviceIds', 'imei name plateNumber')
       .sort({ createdAt: -1 })
       .select('-__v')
       .lean();
@@ -334,16 +545,117 @@ export class SubscriptionsService implements OnModuleInit {
     };
   }
 
-  // Admin: list all subscriptions
   async getAllSubscriptions(status?: SubscriptionStatus) {
     const filter = status ? { status } : {};
     return this.subscriptionModel
       .find(filter)
       .populate('userId', 'email firstName lastName')
       .populate('planId', 'name displayName')
+      .populate('subscribedDeviceIds', 'imei name plateNumber isOnline')
       .sort({ createdAt: -1 })
       .select('-__v')
       .lean();
+  }
+
+  async getSubscriptionAccessState(userId: string) {
+    const deviceCount = await this.getAssignedDeviceCount(userId);
+    const activeSubscription = await this.subscriptionModel
+      .findOne({
+        userId: new Types.ObjectId(userId),
+        status: SubscriptionStatus.ACTIVE,
+        endDate: { $gt: new Date() },
+      })
+      .select('_id planName billingCycle startDate endDate amountPaid subscribedDeviceIds')
+      .lean();
+
+    return {
+      assignedDeviceCount: deviceCount,
+      pricePerDevice: this.pricePerDevice,
+      expectedMonthlyAmount: deviceCount * this.pricePerDevice,
+      expectedYearlyAmount: deviceCount * this.pricePerDevice * 12,
+      hasActiveSubscription: Boolean(activeSubscription),
+      subscriptionRequired: !activeSubscription && deviceCount > 0,
+      shouldPromptSubscription: !activeSubscription && deviceCount > 0,
+      activeSubscription,
+    };
+  }
+
+  /**
+   * Returns the subscribed device IDs for a user's active subscription.
+   * Used by SubscriptionGuard and DevicesService for per-device access control.
+   */
+  async getSubscribedDeviceIds(userId: string): Promise<Types.ObjectId[] | null> {
+    const subscription = await this.subscriptionModel
+      .findOne({
+        userId: new Types.ObjectId(userId),
+        status: SubscriptionStatus.ACTIVE,
+        endDate: { $gt: new Date() },
+      })
+      .select('subscribedDeviceIds')
+      .lean();
+
+    if (!subscription) return null;
+    return (subscription.subscribedDeviceIds ?? []) as Types.ObjectId[];
+  }
+
+  // ─── Private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Resolves which devices to use for a subscription:
+   * - If deviceIds provided: validates they belong to the user and are active.
+   * - If omitted: returns all active devices assigned to the user.
+   */
+  private async resolveUserDevices(
+    userId: string,
+    deviceIds?: string[],
+  ): Promise<DeviceDocument[]> {
+    if (deviceIds && deviceIds.length > 0) {
+      const objectIds = deviceIds.map((id) => new Types.ObjectId(id));
+      const devices = await this.deviceModel
+        .find({
+          _id: { $in: objectIds },
+          assignedUserId: new Types.ObjectId(userId),
+          isActive: true,
+        })
+        .exec();
+
+      if (devices.length !== deviceIds.length) {
+        throw new BadRequestException(
+          'One or more device IDs are invalid or not assigned to this user.',
+        );
+      }
+      return devices;
+    }
+
+    return this.deviceModel
+      .find({ assignedUserId: new Types.ObjectId(userId), isActive: true })
+      .exec();
+  }
+
+  private async validateAdminDeviceIds(
+    userId: string,
+    deviceIds: string[],
+  ): Promise<DeviceDocument[]> {
+    if (!deviceIds || deviceIds.length === 0) {
+      throw new BadRequestException('At least one device ID must be provided.');
+    }
+
+    const objectIds = deviceIds.map((id) => new Types.ObjectId(id));
+    const devices = await this.deviceModel
+      .find({
+        _id: { $in: objectIds },
+        assignedUserId: new Types.ObjectId(userId),
+        isActive: true,
+      })
+      .exec();
+
+    if (devices.length !== deviceIds.length) {
+      throw new BadRequestException(
+        'One or more device IDs are invalid or not assigned to the specified user.',
+      );
+    }
+
+    return devices;
   }
 
   private async validateAndApplyCoupon(
@@ -351,7 +663,6 @@ export class SubscriptionsService implements OnModuleInit {
     planName: PlanName,
     basePrice: number,
   ): Promise<{ discount: number; code: string }> {
-    // First validate without incrementing
     const coupon = await this.couponModel.findOne({ code: code.toUpperCase(), isActive: true });
 
     if (!coupon) {
@@ -364,7 +675,6 @@ export class SubscriptionsService implements OnModuleInit {
       throw new BadRequestException(`Coupon is not applicable to the '${planName}' plan.`);
     }
 
-    // Atomic increment — only succeeds if usedCount is still below maxUsage
     const updated = await this.couponModel.findOneAndUpdate(
       {
         _id: coupon._id,
@@ -388,29 +698,6 @@ export class SubscriptionsService implements OnModuleInit {
     return { discount, code: coupon.code };
   }
 
-  async getSubscriptionAccessState(userId: string) {
-    const deviceCount = await this.getAssignedDeviceCount(userId);
-    const activeSubscription = await this.subscriptionModel
-      .findOne({
-        userId: new Types.ObjectId(userId),
-        status: SubscriptionStatus.ACTIVE,
-        endDate: { $gt: new Date() },
-      })
-      .select('_id planName billingCycle startDate endDate amountPaid')
-      .lean();
-
-    return {
-      assignedDeviceCount: deviceCount,
-      pricePerDevice: this.pricePerDevice,
-      expectedMonthlyAmount: deviceCount * this.pricePerDevice,
-      expectedYearlyAmount: deviceCount * this.pricePerDevice * 12,
-      hasActiveSubscription: Boolean(activeSubscription),
-      subscriptionRequired: !activeSubscription && deviceCount > 0,
-      shouldPromptSubscription: !activeSubscription && deviceCount > 0,
-      activeSubscription,
-    };
-  }
-
   private async getAssignedDeviceCount(userId: string): Promise<number> {
     return this.deviceModel.countDocuments({
       assignedUserId: new Types.ObjectId(userId),
@@ -432,8 +719,6 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   private getBillingCycleFromPlanName(planName: PlanName): BillingCycle {
-    return planName === PlanName.YEARLY
-      ? BillingCycle.YEARLY
-      : BillingCycle.MONTHLY;
+    return planName === PlanName.YEARLY ? BillingCycle.YEARLY : BillingCycle.MONTHLY;
   }
 }
