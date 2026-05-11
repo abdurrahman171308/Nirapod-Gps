@@ -20,17 +20,26 @@ async function bootstrap() {
 
   const corsOrigins = configService.get<string>('CORS_ORIGINS') || '';
   const allowedOrigins = corsOrigins
-    ? corsOrigins.split(',').map((o) => o.trim()).filter(Boolean)
-    : [];
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 
-  const appUrl = configService.get<string>('APP_URL') || '';
+  // Derive the public URL from RAILWAY_PUBLIC_DOMAIN (set automatically by Railway)
+  // or fall back to APP_URL if set manually.
+  const railwayDomain = configService.get<string>('RAILWAY_PUBLIC_DOMAIN');
+  const appUrl = configService.get<string>('APP_URL');
+  const selfOrigin = railwayDomain
+    ? `https://${railwayDomain}`
+    : appUrl?.replace(/\/$/, '') ?? null;
+
+  if (selfOrigin) allowedOrigins.push(selfOrigin);
+
+  logger.log(`CORS allowed origins: ${allowedOrigins.join(', ') || '(none — only no-origin requests)'}`);
 
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (curl, mobile apps, server-to-server)
       if (!origin) return callback(null, true);
-      // Allow the server's own origin (Swagger UI same-site requests)
-      if (appUrl && origin === appUrl.replace(/\/$/, '')) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       callback(new Error(`CORS: origin '${origin}' not allowed`));
     },
