@@ -83,12 +83,15 @@ export class GeofencesController {
   }
 
   @Delete(':id/assign-device/:imei')
-  @Roles(Role.ADMIN)
   @ApiParam({ name: 'id' })
   @ApiParam({ name: 'imei' })
-  @ApiOperation({ summary: 'Unassign device from geofence (Admin only)' })
+  @ApiOperation({ summary: 'Unassign device from geofence (Admin or device owner)' })
   @ApiResponse({ status: 200, description: 'Device unassigned' })
-  async unassignDevice(@Param('id') id: string, @Param('imei') imei: string) {
-    return this.geofencesService.unassignDevice(id, imei);
+  async unassignDevice(
+    @Param('id') id: string,
+    @Param('imei') imei: string,
+    @CurrentUser() user: UserContext,
+  ) {
+    return this.geofencesService.unassignDevice(id, imei, user);
   }
 }

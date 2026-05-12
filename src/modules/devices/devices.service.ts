@@ -273,6 +273,21 @@ export class DevicesService {
     return devices.map((d) => d.imei);
   }
 
+  /**
+   * Returns true if the given IMEI belongs to one of the user's subscribed devices.
+   * Uses subscribedDeviceIds (set by SubscriptionGuard) as the source of truth.
+   */
+  async isImeiSubscribedByUser(imei: string, subscribedDeviceIds: string[]): Promise<boolean> {
+    if (!subscribedDeviceIds || subscribedDeviceIds.length === 0) return false;
+    const device = await this.deviceModel
+      .findOne({ imei })
+      .select('_id')
+      .lean()
+      .exec();
+    if (!device) return false;
+    return subscribedDeviceIds.includes(device._id.toString());
+  }
+
   async setEngineCut(imei: string, isEngineCut: boolean): Promise<void> {
     await this.deviceModel.updateOne({ imei }, { isEngineCut });
   }

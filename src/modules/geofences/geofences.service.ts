@@ -71,14 +71,20 @@ export class GeofencesService {
     this.validateGeofenceShape(dto);
 
     if (user.role !== Role.ADMIN) {
-      const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
       const geofence = await this.geofenceModel.findById(id).lean().exec();
       if (!geofence) {
         throw new NotFoundException('Geofence not found');
       }
-      const hasAccess =
-        geofence.deviceImeis.length === 0 ||
-        geofence.deviceImeis.some((imei) => assignedImeis.includes(imei));
+      const subscribedIds = user.subscribedDeviceIds ?? [];
+      let hasAccess = geofence.deviceImeis.length === 0;
+      if (!hasAccess) {
+        const checks = await Promise.all(
+          geofence.deviceImeis.map((imei) =>
+            this.devicesService.isImeiSubscribedByUser(imei, subscribedIds),
+          ),
+        );
+        hasAccess = checks.some(Boolean);
+      }
       if (!hasAccess) {
         throw new ForbiddenException('You do not have permission to update this geofence');
       }
@@ -104,9 +110,9 @@ export class GeofencesService {
 
   async assignDevice(id: string, imei: string, user: UserContext) {
     if (user.role !== Role.ADMIN) {
-      const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
-      if (!assignedImeis.includes(imei)) {
-        throw new BadRequestException('You can only assign devices that belong to you');
+      const owned = await this.devicesService.isImeiSubscribedByUser(imei, user.subscribedDeviceIds ?? []);
+      if (!owned) {
+        throw new BadRequestException('You can only assign devices that belong to your subscription');
       }
     }
 
@@ -125,7 +131,14 @@ export class GeofencesService {
     return geofence;
   }
 
-  async unassignDevice(id: string, imei: string) {
+  async unassignDevice(id: string, imei: string, user: UserContext) {
+    if (user.role !== Role.ADMIN) {
+      const owned = await this.devicesService.isImeiSubscribedByUser(imei, user.subscribedDeviceIds ?? []);
+      if (!owned) {
+        throw new BadRequestException('You can only unassign devices that belong to your subscription');
+      }
+    }
+
     const geofence = await this.geofenceModel
       .findByIdAndUpdate(id, { $pull: { deviceImeis: imei } }, { new: true })
       .exec();
