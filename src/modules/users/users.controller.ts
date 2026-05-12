@@ -95,6 +95,21 @@ export class UsersController {
     return this.sanitize(user);
   }
 
+  @Put(':id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Update a user profile (Admin only)' })
+  @ApiParam({ name: 'id', description: 'User MongoDB ID' })
+  @ApiResponse({ status: 200, description: 'User updated' })
+  async adminUpdate(@Param('id') id: string, @Body() dto: UpdateProfileDto) {
+    const user = await this.usersService.adminUpdateUser(id, {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phone: dto.phone,
+      address: dto.address,
+    });
+    return this.sanitize(user);
+  }
+
   @Patch(':id/deactivate')
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)

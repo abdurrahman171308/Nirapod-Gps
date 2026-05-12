@@ -172,6 +172,29 @@ export class UsersService {
     return this.userModel.find().sort({ createdAt: -1 }).exec();
   }
 
+  async adminUpdateUser(
+    id: string,
+    data: {
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+      address?: UserAddress;
+    },
+  ): Promise<UserDocument> {
+    const update: Partial<typeof data> = {};
+    if (data.firstName !== undefined) update.firstName = data.firstName;
+    if (data.lastName !== undefined) update.lastName = data.lastName;
+    if (data.phone !== undefined) update.phone = data.phone;
+    if (data.address !== undefined) update.address = data.address;
+
+    const user = await this.userModel
+      .findByIdAndUpdate(id, update, { new: true })
+      .exec();
+
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
   async setActiveStatus(id: string, isActive: boolean): Promise<UserDocument> {
     const user = await this.userModel
       .findByIdAndUpdate(id, { isActive }, { new: true })
