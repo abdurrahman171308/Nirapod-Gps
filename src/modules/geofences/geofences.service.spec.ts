@@ -4,6 +4,7 @@ import { GeofencesService } from './geofences.service';
 import { Geofence } from '../../database/schemas/geofence.schema';
 import { DevicesService } from '../devices/devices.service';
 import { AlertsService } from '../alerts/alerts.service';
+import { Role } from '../../common/enums/roles.enum';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GeofencesServicePrivate = any;
@@ -171,5 +172,54 @@ describe('GeofencesService – geometry', () => {
         expect(service.isInsideGeofence(noPoints as Geofence, 0.5, 0.5)).toBe(false);
       });
     });
+  });
+});
+
+describe('GeofencesService - findAll', () => {
+  it('returns all geofences for regular users', async () => {
+    const geofences = [{ _id: 'g1' }, { _id: 'g2' }];
+    const exec = jest.fn().mockResolvedValue(geofences);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const sort = jest.fn().mockReturnValue({ lean });
+    const find = jest.fn().mockReturnValue({ sort });
+    const devicesService = { getAssignedImeis: jest.fn() };
+
+    const service = new GeofencesService(
+      { find } as any,
+      devicesService as any,
+      {} as any,
+    );
+
+    const result = await service.findAll({
+      userId: 'user-1',
+      role: Role.USER,
+    });
+
+    expect(result).toBe(geofences);
+    expect(find).toHaveBeenCalledWith();
+    expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(devicesService.getAssignedImeis).not.toHaveBeenCalled();
+  });
+
+  it('returns all geofences for admins', async () => {
+    const geofences = [{ _id: 'g1' }];
+    const exec = jest.fn().mockResolvedValue(geofences);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const sort = jest.fn().mockReturnValue({ lean });
+    const find = jest.fn().mockReturnValue({ sort });
+
+    const service = new GeofencesService(
+      { find } as any,
+      {} as any,
+      {} as any,
+    );
+
+    const result = await service.findAll({
+      userId: 'admin-1',
+      role: Role.ADMIN,
+    });
+
+    expect(result).toBe(geofences);
+    expect(find).toHaveBeenCalledWith();
   });
 });

@@ -41,7 +41,7 @@ export class GeofencesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get geofences (Admin: all, User: assigned)' })
+  @ApiOperation({ summary: 'Get geofences (all authenticated users)' })
   @ApiResponse({ status: 200, description: 'Geofence list' })
   async findAll(@CurrentUser() user: UserContext) {
     return this.geofencesService.findAll(user);

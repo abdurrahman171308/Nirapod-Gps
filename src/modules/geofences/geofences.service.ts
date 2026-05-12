@@ -43,25 +43,9 @@ export class GeofencesService {
     return geofence.save();
   }
 
-  async findAll(user: UserContext) {
-    if (user.role === Role.ADMIN) {
-      return this.geofenceModel.find().sort({ createdAt: -1 }).lean().exec();
-    }
-
-    const assignedImeis = await this.devicesService.getAssignedImeis(
-      user.userId,
-    );
-    if (assignedImeis.length === 0) {
-      return [];
-    }
-
+  async findAll(_user: UserContext) {
     return this.geofenceModel
-      .find({
-        $or: [
-          { deviceImeis: { $size: 0 } },
-          { deviceImeis: { $in: assignedImeis } },
-        ],
-      })
+      .find()
       .sort({ createdAt: -1 })
       .lean()
       .exec();
