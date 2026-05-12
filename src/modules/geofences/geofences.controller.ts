@@ -15,8 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CurrentUser, Roles, RequireSubscription } from '../../common/decorators';
-import { Role } from '../../common/enums/roles.enum';
+import { CurrentUser, RequireSubscription } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards';
 import { UserContext } from '../devices/devices.service';
 import {
@@ -35,11 +34,10 @@ export class GeofencesController {
   constructor(private readonly geofencesService: GeofencesService) {}
 
   @Post()
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Create geofence (Admin only)' })
+  @ApiOperation({ summary: 'Create geofence (Admin or User)' })
   @ApiResponse({ status: 201, description: 'Geofence created' })
-  async create(@Body() dto: CreateGeofenceDto) {
-    return this.geofencesService.create(dto);
+  async create(@Body() dto: CreateGeofenceDto, @CurrentUser() user: UserContext) {
+    return this.geofencesService.create(dto, user);
   }
 
   @Get()
@@ -62,12 +60,11 @@ export class GeofencesController {
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
   @ApiParam({ name: 'id' })
-  @ApiOperation({ summary: 'Delete geofence (Admin only)' })
+  @ApiOperation({ summary: 'Delete geofence (Admin or User)' })
   @ApiResponse({ status: 200, description: 'Geofence deleted' })
-  async remove(@Param('id') id: string) {
-    return this.geofencesService.remove(id);
+  async remove(@Param('id') id: string, @CurrentUser() user: UserContext) {
+    return this.geofencesService.remove(id, user);
   }
 
   @Post(':id/assign-device')

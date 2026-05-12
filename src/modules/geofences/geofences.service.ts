@@ -30,7 +30,7 @@ export class GeofencesService {
     private readonly alertsService: AlertsService,
   ) {}
 
-  async create(dto: CreateGeofenceDto) {
+  async create(dto: CreateGeofenceDto, _user: UserContext) {
     this.validateGeofenceShape(dto);
     const geofence = new this.geofenceModel({
       ...dto,
@@ -101,7 +101,7 @@ export class GeofencesService {
     return geofence;
   }
 
-  async remove(id: string) {
+  async remove(id: string, _user: UserContext) {
     const result = await this.geofenceModel.findByIdAndDelete(id).exec();
     if (!result) {
       throw new NotFoundException('Geofence not found');
