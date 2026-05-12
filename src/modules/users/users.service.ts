@@ -21,7 +21,9 @@ export class UsersService {
   }
 
   async findByUsername(username: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ username: username.toLowerCase() }).exec();
+    return this.userModel
+      .findOne({ username: { $regex: new RegExp(`^${username}$`, 'i') } })
+      .exec();
   }
 
   async findById(id: string | Types.ObjectId): Promise<UserDocument | null> {
@@ -83,23 +85,25 @@ export class UsersService {
   async seedAdmin(
     email: string,
     password: string,
+    username?: string,
   ): Promise<UserDocument | null> {
-    const adminCount = await this.countAdmins();
-
-    if (adminCount > 0) {
-      return null;
-    }
-
     const existingUser = await this.findByEmail(email);
+
     if (existingUser) {
+      let dirty = false;
       if (existingUser.role !== Role.ADMIN) {
         existingUser.role = Role.ADMIN;
-        return existingUser.save();
+        dirty = true;
       }
-      return existingUser;
+      // Patch username onto existing admin if it is missing
+      if (username && !existingUser.username) {
+        existingUser.username = username.toLowerCase();
+        dirty = true;
+      }
+      return dirty ? existingUser.save() : existingUser;
     }
 
-    return this.create(email, password, Role.ADMIN);
+    return this.create(email, password, Role.ADMIN, undefined, undefined, username);
   }
 
   async deactivateUser(id: string): Promise<UserDocument> {

@@ -40,18 +40,21 @@ export class AuthService implements OnModuleInit {
   private async seedAdminUser() {
     const adminEmail = this.configService.get<string>('ADMIN_EMAIL');
     const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
+    const adminUsername = this.configService.get<string>('ADMIN_USERNAME');
 
     if (!adminEmail || !adminPassword) {
       this.logger.warn('ADMIN_EMAIL or ADMIN_PASSWORD not set in environment');
       return;
     }
 
-    const result = await this.usersService.seedAdmin(adminEmail, adminPassword);
+    if (!adminUsername) {
+      this.logger.warn('ADMIN_USERNAME not set — admin may not be able to log in');
+    }
+
+    const result = await this.usersService.seedAdmin(adminEmail, adminPassword, adminUsername);
 
     if (result) {
-      this.logger.log(`Admin user seeded: ${adminEmail}`);
-    } else {
-      this.logger.log('Admin user already exists, skipping seed');
+      this.logger.log(`Admin user seeded/updated: ${adminEmail} (@${adminUsername ?? 'no-username'})`);
     }
   }
 
