@@ -6,13 +6,12 @@ import {
   ApiCookieAuth,
 } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
-import { CurrentUser, RequireSubscription } from '../../common/decorators';
+import { CurrentUser } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards';
 import { UserContext } from './dashboard.service';
 
 @ApiTags('Dashboard')
 @ApiCookieAuth()
-@RequireSubscription()
 @Controller('dashboard')
 @UseGuards(RolesGuard)
 export class DashboardController {
@@ -22,7 +21,7 @@ export class DashboardController {
   @ApiOperation({
     summary: 'Get dashboard summary',
     description:
-      'Admin: all devices, users, alerts. User: only assigned devices and their alerts.',
+      'Admin: all devices, users, alerts, and subscription coverage. User: assigned devices, alerts, and subscription coverage even when their subscription has expired.',
   })
   @ApiResponse({ status: 200, description: 'Dashboard summary data' })
   async getSummary(@CurrentUser() user: UserContext) {

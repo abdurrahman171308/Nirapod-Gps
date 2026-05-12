@@ -4,6 +4,11 @@ import { Model, Types } from 'mongoose';
 import { Device, DeviceDocument } from '../../database/schemas/device.schema';
 import { Alert, AlertDocument } from '../../database/schemas/alert.schema';
 import { User, UserDocument } from '../../database/schemas/user.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+} from '../../database/schemas/subscription.schema';
 import { Role } from '../../common/enums/roles.enum';
 import {
   IGNITION_STATE_FRESH_MS,
@@ -21,6 +26,8 @@ export class DashboardService {
     @InjectModel(Device.name) private deviceModel: Model<DeviceDocument>,
     @InjectModel(Alert.name) private alertModel: Model<AlertDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Subscription.name)
+    private subscriptionModel: Model<SubscriptionDocument>,
   ) {}
 
   private isRecentlyActive(lastSeenAt?: Date | null): boolean {
@@ -56,6 +63,32 @@ export class DashboardService {
       : undefined;
   }
 
+  private buildCoveredDeviceIdSet(
+    subscriptions: Array<{ subscribedDeviceIds?: Types.ObjectId[] | string[] | null }>,
+  ): Set<string> {
+    return new Set(
+      subscriptions.flatMap((subscription) =>
+        (subscription.subscribedDeviceIds ?? []).map((deviceId) =>
+          deviceId.toString(),
+        ),
+      ),
+    );
+  }
+
+  private summarizeSubscriptionCoverage(
+    devices: Array<{ _id: Types.ObjectId }>,
+    coveredDeviceIds: Set<string>,
+  ) {
+    const active = devices.filter((device) =>
+      coveredDeviceIds.has(device._id.toString()),
+    ).length;
+
+    return {
+      active,
+      expired: Math.max(0, devices.length - active),
+    };
+  }
+
   async getSummary(user: UserContext) {
     if (user.role === Role.ADMIN) {
       return this.getAdminSummary();
@@ -64,7 +97,8 @@ export class DashboardService {
   }
 
   private async getAdminSummary() {
-    const [totalDevices, activeAlerts, totalUsers, devices] = await Promise.all([
+    const [totalDevices, activeAlerts, totalUsers, devices, activeSubscriptions] =
+      await Promise.all([
       this.deviceModel.countDocuments({}).exec(),
       this.alertModel.countDocuments({ isAcknowledged: false }).exec(),
       this.userModel.countDocuments({ isActive: true, role: Role.USER }).exec(),
@@ -75,7 +109,15 @@ export class DashboardService {
         )
         .lean()
         .exec(),
-    ]);
+      this.subscriptionModel
+        .find({
+          status: SubscriptionStatus.ACTIVE,
+          endDate: { $gt: new Date() },
+        })
+        .select('subscribedDeviceIds')
+        .lean()
+        .exec(),
+      ]);
 
     const onlineDevices = devices.filter((d) =>
       this.isCurrentlyOnline(d),
@@ -107,6 +149,12 @@ export class DashboardService {
         lastIgnitionAt: d.lastIgnitionAt,
       }));
 
+    const coveredDeviceIds = this.buildCoveredDeviceIdSet(activeSubscriptions);
+    const subscriptionCounts = this.summarizeSubscriptionCoverage(
+      devices,
+      coveredDeviceIds,
+    );
+
     return {
       devices: {
         total: totalDevices,
@@ -115,6 +163,7 @@ export class DashboardService {
         engineOn: engineOnCount,
         engineOff: engineOffCount,
       },
+      subscriptions: subscriptionCounts,
       alerts: {
         unacknowledged: activeAlerts,
         recent: recentAlerts,
@@ -129,13 +178,24 @@ export class DashboardService {
   private async getUserSummary(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
 
-    const assignedDevices = await this.deviceModel
-      .find({ assignedUserId: userObjectId })
-      .select(
-        'imei name isOnline lastLat lastLng lastSpeed lastSeenAt lastIgnition lastIgnitionAt',
-      )
-      .lean()
-      .exec();
+    const [assignedDevices, activeSubscription] = await Promise.all([
+      this.deviceModel
+        .find({ assignedUserId: userObjectId })
+        .select(
+          'imei name isOnline lastLat lastLng lastSpeed lastSeenAt lastIgnition lastIgnitionAt',
+        )
+        .lean()
+        .exec(),
+      this.subscriptionModel
+        .find({
+          userId: userObjectId,
+          status: SubscriptionStatus.ACTIVE,
+          endDate: { $gt: new Date() },
+        })
+        .select('subscribedDeviceIds')
+        .lean()
+        .exec(),
+    ]);
 
     const imeis = assignedDevices.map((d) => d.imei);
 
@@ -183,6 +243,12 @@ export class DashboardService {
         lastIgnitionAt: d.lastIgnitionAt,
       }));
 
+    const coveredDeviceIds = this.buildCoveredDeviceIdSet(activeSubscription);
+    const subscriptionCounts = this.summarizeSubscriptionCoverage(
+      assignedDevices,
+      coveredDeviceIds,
+    );
+
     return {
       devices: {
         total: assignedDevices.length,
@@ -191,6 +257,7 @@ export class DashboardService {
         engineOn: engineOnCount,
         engineOff: engineOffCount,
       },
+      subscriptions: subscriptionCounts,
       alerts: {
         unacknowledged: activeAlerts,
         recent: recentAlerts,
