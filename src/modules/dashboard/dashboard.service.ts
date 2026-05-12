@@ -128,13 +128,6 @@ export class DashboardService {
     ).length;
     const engineOffCount = Math.max(0, totalDevices - engineOnCount);
 
-    const recentAlerts = await this.alertModel
-      .find({ isAcknowledged: false })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .lean()
-      .exec();
-
     const recentLocations = devices
       .filter((d) => d.lastLat != null)
       .map((d) => ({
@@ -166,7 +159,6 @@ export class DashboardService {
       subscriptions: subscriptionCounts,
       alerts: {
         unacknowledged: activeAlerts,
-        recent: recentAlerts,
       },
       users: {
         total: totalUsers,
@@ -219,16 +211,6 @@ export class DashboardService {
         : Promise.resolve(0),
     ]);
 
-    const recentAlerts =
-      imeis.length > 0
-        ? await this.alertModel
-            .find({ isAcknowledged: false, imei: { $in: imeis } })
-            .sort({ createdAt: -1 })
-            .limit(5)
-            .lean()
-            .exec()
-        : [];
-
     const recentLocations = assignedDevices
       .filter((d) => d.lastLat != null)
       .map((d) => ({
@@ -260,7 +242,6 @@ export class DashboardService {
       subscriptions: subscriptionCounts,
       alerts: {
         unacknowledged: activeAlerts,
-        recent: recentAlerts,
       },
       recentLocations,
     };

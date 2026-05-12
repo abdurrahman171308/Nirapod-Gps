@@ -20,14 +20,6 @@ function createSelectLeanQuery<T>(value: T) {
   };
 }
 
-function createRecentAlertsQuery<T>(value: T) {
-  return {
-    sort: jest.fn().mockReturnValue({
-      limit: jest.fn().mockReturnValue(createLeanQuery(value)),
-    }),
-  };
-}
-
 describe('DashboardService', () => {
   it('returns active and expired subscription counts for assigned user devices', async () => {
     const now = new Date();
@@ -73,7 +65,6 @@ describe('DashboardService', () => {
     };
     const alertModel = {
       countDocuments: jest.fn().mockReturnValue(createExecQuery(0)),
-      find: jest.fn().mockReturnValue(createRecentAlertsQuery([])),
     };
     const userModel = {};
     const subscriptionModel = {
@@ -137,7 +128,6 @@ describe('DashboardService', () => {
     };
     const alertModel = {
       countDocuments: jest.fn().mockReturnValue(createExecQuery(0)),
-      find: jest.fn().mockReturnValue(createRecentAlertsQuery([])),
     };
     const subscriptionModel = {
       find: jest.fn().mockReturnValue(createSelectLeanQuery([])),
