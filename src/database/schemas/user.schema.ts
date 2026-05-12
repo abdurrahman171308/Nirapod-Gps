@@ -4,21 +4,31 @@ import { Role } from '../../common/enums/roles.enum';
 
 export type UserDocument = User & Document;
 
+export class UserAddress {
+  declare district: string;
+  declare thana: string;
+  union?: string;
+  declare addressLine: string;
+}
+
 @Schema({ timestamps: true })
 export class User {
-  _id: Types.ObjectId;
+  declare _id: Types.ObjectId;
 
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
-  email: string;
+  declare email: string;
+
+  @Prop({ required: true, unique: true, lowercase: true, trim: true })
+  declare username: string;
 
   @Prop({ required: true })
-  passwordHash: string;
+  declare passwordHash: string;
 
   @Prop({ type: String, enum: Role, default: Role.USER })
-  role: Role;
+  declare role: Role;
 
   @Prop({ default: true })
-  isActive: boolean;
+  declare isActive: boolean;
 
   @Prop()
   firstName?: string;
@@ -26,17 +36,31 @@ export class User {
   @Prop()
   lastName?: string;
 
+  @Prop({ required: true })
+  declare phone: string;
+
+  @Prop({
+    type: {
+      district: { type: String, required: true },
+      thana: { type: String, required: true },
+      union: { type: String },
+      addressLine: { type: String, required: true },
+    },
+  })
+  address?: UserAddress;
+
   @Prop({ type: Types.ObjectId, ref: 'Subscription' })
   subscriptionId?: Types.ObjectId;
 
   @Prop()
   fcmToken?: string;
 
-  createdAt: Date;
-  updatedAt: Date;
+  declare createdAt: Date;
+  declare updatedAt: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
+UserSchema.index({ username: 1 });

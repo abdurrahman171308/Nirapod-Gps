@@ -56,10 +56,10 @@ export class AuthService implements OnModuleInit {
   }
 
   async login(loginDto: LoginDto, userAgent?: string, ipAddress?: string) {
-    const user = await this.usersService.findByEmail(loginDto.email);
+    const user = await this.usersService.findByUsername(loginDto.username);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid username or password');
     }
 
     if (!user.isActive) {
@@ -72,7 +72,7 @@ export class AuthService implements OnModuleInit {
     );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid username or password');
     }
 
     const tokens = await this.generateTokens(user, userAgent, ipAddress);
@@ -90,6 +90,9 @@ export class AuthService implements OnModuleInit {
       Role.USER,
       registerDto.firstName,
       registerDto.lastName,
+      registerDto.username,
+      registerDto.phone,
+      registerDto.address,
     );
 
     return this.buildAuthUser(user);
@@ -267,9 +270,12 @@ export class AuthService implements OnModuleInit {
     return {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
       role: user.role,
       firstName: user.firstName,
       lastName: user.lastName,
+      phone: user.phone,
+      address: user.address,
       isActive: user.isActive,
       createdAt: user.createdAt,
     };

@@ -50,6 +50,8 @@ export class UsersController {
       userId,
       dto.firstName,
       dto.lastName,
+      dto.phone,
+      dto.address,
     );
     return this.sanitize(user);
   }
@@ -120,9 +122,12 @@ export class UsersController {
     return {
       id: user._id?.toString(),
       email: user.email,
+      username: user.username,
       role: user.role,
       firstName: user.firstName,
       lastName: user.lastName,
+      phone: user.phone,
+      address: user.address,
       isActive: user.isActive,
       createdAt: user.createdAt,
     };

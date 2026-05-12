@@ -7,7 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { User, UserDocument } from '../../database/schemas/user.schema';
+import { User, UserAddress, UserDocument } from '../../database/schemas/user.schema';
 import { Role } from '../../common/enums/roles.enum';
 
 @Injectable()
@@ -20,6 +20,10 @@ export class UsersService {
     return this.userModel.findOne({ email: email.toLowerCase() }).exec();
   }
 
+  async findByUsername(username: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ username: username.toLowerCase() }).exec();
+  }
+
   async findById(id: string | Types.ObjectId): Promise<UserDocument | null> {
     return this.userModel.findById(id).exec();
   }
@@ -30,20 +34,33 @@ export class UsersService {
     role: Role = Role.USER,
     firstName?: string,
     lastName?: string,
+    username?: string,
+    phone?: string,
+    address?: UserAddress,
   ): Promise<UserDocument> {
-    const existingUser = await this.findByEmail(email);
-    if (existingUser) {
+    const existingEmail = await this.findByEmail(email);
+    if (existingEmail) {
       throw new ConflictException('User with this email already exists');
+    }
+
+    if (username) {
+      const existingUsername = await this.findByUsername(username);
+      if (existingUsername) {
+        throw new ConflictException('This username is already taken');
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, this.SALT_ROUNDS);
 
     const user = new this.userModel({
       email: email.toLowerCase(),
+      username: username?.toLowerCase(),
       passwordHash,
       role,
       firstName,
       lastName,
+      phone,
+      address,
       isActive: true,
     });
 
@@ -106,10 +123,19 @@ export class UsersService {
     userId: string,
     firstName?: string,
     lastName?: string,
+    phone?: string,
+    address?: UserAddress,
   ): Promise<UserDocument> {
-    const update: any = {};
+    const update: Partial<{
+      firstName: string;
+      lastName: string;
+      phone: string;
+      address: UserAddress;
+    }> = {};
     if (firstName !== undefined) update.firstName = firstName;
     if (lastName !== undefined) update.lastName = lastName;
+    if (phone !== undefined) update.phone = phone;
+    if (address !== undefined) update.address = address;
 
     const user = await this.userModel
       .findByIdAndUpdate(userId, update, { new: true })

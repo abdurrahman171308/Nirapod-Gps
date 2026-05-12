@@ -16,6 +16,7 @@ import { PaymentRecord, PaymentRecordDocument, PaymentStatus } from '../../datab
 import { User, UserDocument } from '../../database/schemas/user.schema';
 import { Device, DeviceDocument } from '../../database/schemas/device.schema';
 import { CreateSubscriptionDto, AdminCreateSubscriptionDto, AdminRenewSubscriptionDto } from './dto';
+import { FcmService } from '../fcm/fcm.service';
 
 @Injectable()
 export class SubscriptionsService implements OnModuleInit {
@@ -29,6 +30,7 @@ export class SubscriptionsService implements OnModuleInit {
     @InjectModel(PaymentRecord.name) private paymentRecordModel: Model<PaymentRecordDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Device.name) private deviceModel: Model<DeviceDocument>,
+    private readonly fcmService: FcmService,
   ) {}
 
   async onModuleInit() {
@@ -103,6 +105,64 @@ export class SubscriptionsService implements OnModuleInit {
       }
     } catch (error) {
       this.logger.error(`Error expiring subscriptions: ${error}`);
+    }
+  }
+
+  // Runs once daily at 9:00 AM — sends push reminders 7 days and 3 days before expiry.
+  @Cron('0 9 * * *')
+  async sendExpiryReminders() {
+    const REMINDER_DAYS = [7, 3];
+
+    for (const daysLeft of REMINDER_DAYS) {
+      try {
+        const windowStart = new Date();
+        windowStart.setDate(windowStart.getDate() + daysLeft);
+        windowStart.setHours(0, 0, 0, 0);
+
+        const windowEnd = new Date(windowStart);
+        windowEnd.setHours(23, 59, 59, 999);
+
+        const expiringSubs = await this.subscriptionModel
+          .find({
+            status: SubscriptionStatus.ACTIVE,
+            endDate: { $gte: windowStart, $lte: windowEnd },
+          })
+          .select('userId planName endDate')
+          .lean();
+
+        for (const sub of expiringSubs) {
+          const user = await this.userModel
+            .findById(sub.userId)
+            .select('fcmToken firstName')
+            .lean();
+
+          if (!user?.fcmToken) continue;
+
+          const displayName = user.firstName ?? 'there';
+          const expiryDate = new Date(sub.endDate).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          });
+
+          await this.fcmService.sendToToken(
+            user.fcmToken,
+            `Subscription Expiring in ${daysLeft} Days`,
+            `Hi ${displayName}, your ${sub.planName} plan expires on ${expiryDate}. Please renew to avoid service interruption.`,
+            {
+              type: 'SUBSCRIPTION_EXPIRY_REMINDER',
+              daysLeft: String(daysLeft),
+              expiryDate: new Date(sub.endDate).toISOString(),
+            },
+          );
+
+          this.logger.log(
+            `Sent ${daysLeft}-day expiry reminder to user ${String(sub.userId)}`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(`Error sending ${daysLeft}-day expiry reminders: ${error}`);
+      }
     }
   }
 
