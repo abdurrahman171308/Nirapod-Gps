@@ -7,7 +7,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { User, UserAddress, UserDocument } from '../../database/schemas/user.schema';
+import { User, UserDocument } from '../../database/schemas/user.schema';
+import { UpdateAddressDto } from './dto/update-profile.dto';
 import { Role } from '../../common/enums/roles.enum';
 
 @Injectable()
@@ -38,7 +39,7 @@ export class UsersService {
     lastName?: string,
     username?: string,
     phone?: string,
-    address?: UserAddress,
+    address?: UpdateAddressDto,
   ): Promise<UserDocument> {
     const existingEmail = await this.findByEmail(email);
     if (existingEmail) {
@@ -128,13 +129,13 @@ export class UsersService {
     firstName?: string,
     lastName?: string,
     phone?: string,
-    address?: UserAddress,
+    address?: UpdateAddressDto,
   ): Promise<UserDocument> {
     const update: Partial<{
       firstName: string;
       lastName: string;
       phone: string;
-      address: UserAddress;
+      address: UpdateAddressDto;
     }> = {};
     if (firstName !== undefined) update.firstName = firstName;
     if (lastName !== undefined) update.lastName = lastName;
@@ -182,7 +183,7 @@ export class UsersService {
       firstName?: string;
       lastName?: string;
       phone?: string;
-      address?: UserAddress;
+      address?: UpdateAddressDto;
     },
   ): Promise<UserDocument> {
     const update: Partial<typeof data> = {};
