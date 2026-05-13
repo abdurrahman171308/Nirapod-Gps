@@ -21,6 +21,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { FcmModule } from './modules/fcm/fcm.module';
+import { AddressModule } from './modules/address/address.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -60,6 +61,7 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
     SubscriptionsModule,
     CouponsModule,
     FcmModule,
+    AddressModule,
   ],
   providers: [
     {
