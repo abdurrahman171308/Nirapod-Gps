@@ -74,6 +74,7 @@ async function bootstrap() {
     .addTag('Geofences', 'Geofence management and geofence alerts')
     .addTag('Commands', 'Remote command dispatch to trackers')
     .addTag('Reports', 'Fleet and device operational reports')
+    .addTag('Address', 'Bangladesh divisions, districts and upazilas')
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
