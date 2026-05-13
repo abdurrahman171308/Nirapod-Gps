@@ -4,14 +4,21 @@ import { Type } from 'class-transformer';
 
 export class UpdateAddressDto {
   @ApiPropertyOptional({ example: 'Dhaka' })
+  @IsOptional()
+  @IsString()
+  division?: string;
+
+  @ApiPropertyOptional({ example: 'Dhaka' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  declare district: string;
+  district?: string;
 
   @ApiPropertyOptional({ example: 'Mirpur' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  declare thana: string;
+  thana?: string;
 
   @ApiPropertyOptional({ example: 'Mirpur-1' })
   @IsOptional()
@@ -19,9 +26,10 @@ export class UpdateAddressDto {
   union?: string;
 
   @ApiPropertyOptional({ example: 'House 12, Road 5, Block B' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  declare addressLine: string;
+  addressLine?: string;
 }
 
 export class UpdateProfileDto {

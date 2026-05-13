@@ -5,6 +5,7 @@ import { Role } from '../../common/enums/roles.enum';
 export type UserDocument = User & Document;
 
 export class UserAddress {
+  division?: string;
   declare district: string;
   declare thana: string;
   union?: string;
@@ -41,6 +42,7 @@ export class User {
 
   @Prop({
     type: {
+      division: { type: String },
       district: { type: String, required: true },
       thana: { type: String, required: true },
       union: { type: String },
