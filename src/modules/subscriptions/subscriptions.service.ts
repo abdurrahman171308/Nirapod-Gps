@@ -345,16 +345,6 @@ export class SubscriptionsService implements OnModuleInit {
     const user = await this.userModel.findById(dto.userId).lean();
     if (!user) throw new NotFoundException(`User '${dto.userId}' not found.`);
 
-    const existing = await this.subscriptionModel.findOne({
-      userId: new Types.ObjectId(dto.userId),
-      status: SubscriptionStatus.ACTIVE,
-    });
-    if (existing && existing.endDate > new Date()) {
-      throw new ConflictException(
-        'User already has an active subscription. Use the renew endpoint to extend it.',
-      );
-    }
-
     const plan = await this.planModel.findOne({ name: dto.planName, isActive: true });
     if (!plan) throw new NotFoundException(`Plan '${dto.planName}' not found.`);
 
@@ -380,8 +370,9 @@ export class SubscriptionsService implements OnModuleInit {
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + dto.durationMonths);
 
+    // Cancel any existing subscriptions (active or otherwise) before creating a new one
     await this.subscriptionModel.updateMany(
-      { userId: new Types.ObjectId(dto.userId), status: { $ne: SubscriptionStatus.ACTIVE } },
+      { userId: new Types.ObjectId(dto.userId) },
       { status: SubscriptionStatus.CANCELLED },
     );
 
