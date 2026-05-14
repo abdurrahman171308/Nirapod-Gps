@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -12,10 +13,30 @@ import {
 import { Type } from 'class-transformer';
 
 export class AddressDto {
+  @ApiPropertyOptional({ example: 3 })
+  @IsOptional()
+  @IsNumber()
+  divisionId?: number;
+
+  @ApiPropertyOptional({ example: 'Dhaka' })
+  @IsOptional()
+  @IsString()
+  division?: string;
+
+  @ApiPropertyOptional({ example: 47 })
+  @IsOptional()
+  @IsNumber()
+  districtId?: number;
+
   @ApiProperty({ example: 'Dhaka' })
   @IsString()
   @IsNotEmpty()
   declare district: string;
+
+  @ApiPropertyOptional({ example: 584 })
+  @IsOptional()
+  @IsNumber()
+  upazilaId?: number;
 
   @ApiProperty({ example: 'Mirpur' })
   @IsString()
