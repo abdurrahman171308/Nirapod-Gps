@@ -370,10 +370,12 @@ export class SubscriptionsService implements OnModuleInit {
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + dto.durationMonths);
 
-    // Cancel any existing subscriptions (active or otherwise) before creating a new one
+    // Cancel all existing subscriptions for this user before creating a new one.
+    // updateMany is awaited first so the partial unique index on (userId + ACTIVE)
+    // is clear before the new ACTIVE document is inserted.
     await this.subscriptionModel.updateMany(
       { userId: new Types.ObjectId(dto.userId) },
-      { status: SubscriptionStatus.CANCELLED },
+      { $set: { status: SubscriptionStatus.CANCELLED } },
     );
 
     const subscription = await this.subscriptionModel.create({
