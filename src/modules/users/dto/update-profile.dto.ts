@@ -1,18 +1,33 @@
-import { IsOptional, IsString, MinLength, MaxLength, IsNotEmpty, ValidateNested } from 'class-validator';
+import { IsOptional, IsString, IsNumber, MinLength, MaxLength, IsNotEmpty, ValidateNested } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export class UpdateAddressDto {
+  @ApiPropertyOptional({ example: 3 })
+  @IsOptional()
+  @IsNumber()
+  divisionId?: number;
+
   @ApiPropertyOptional({ example: 'Dhaka' })
   @IsOptional()
   @IsString()
   division?: string;
+
+  @ApiPropertyOptional({ example: 47 })
+  @IsOptional()
+  @IsNumber()
+  districtId?: number;
 
   @ApiPropertyOptional({ example: 'Dhaka' })
   @IsOptional()
   @IsString()
   @IsNotEmpty()
   district?: string;
+
+  @ApiPropertyOptional({ example: 584 })
+  @IsOptional()
+  @IsNumber()
+  upazilaId?: number;
 
   @ApiPropertyOptional({ example: 'Mirpur' })
   @IsOptional()
