@@ -40,6 +40,35 @@ export class TrackingService {
     private readonly tripsService: TripsService,
   ) {}
 
+  async getLiveAll(user: UserContext) {
+    const devices = await this.devicesService.findAll(user);
+
+    const results = await Promise.all(
+      devices.map(async (device) => {
+        const latestLocation = await this.devicesService.getLatestLocation(
+          device.imei,
+          user,
+        );
+        const isOnline = Boolean(
+          device.isOnline && device.lastSeenAt &&
+          Date.now() - new Date(device.lastSeenAt).getTime() < ONLINE_THRESHOLD_MS,
+        );
+        const liveLocation = this.buildLiveLocation(latestLocation, device, isOnline);
+        return {
+          imei: device.imei,
+          name: device.name,
+          plateNumber: device.plateNumber,
+          isOnline,
+          engineOn: liveLocation ? (liveLocation.ignition ?? null) : null,
+          lastSeenAt: device.lastSeenAt,
+          latestLocation: liveLocation,
+        };
+      }),
+    );
+
+    return results;
+  }
+
   async getLive(imei: string, user: UserContext) {
     const device = await this.devicesService.validateDeviceAccessByImei(
       imei,

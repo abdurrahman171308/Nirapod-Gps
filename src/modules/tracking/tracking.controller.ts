@@ -19,6 +19,13 @@ import { StopsQueryDto, TrackingQueryDto } from './dto';
 export class TrackingController {
   constructor(private readonly trackingService: TrackingService) {}
 
+  @Get('live/all')
+  @ApiOperation({ summary: 'Get current live state for all assigned devices' })
+  @ApiResponse({ status: 200, description: 'Live state for all devices' })
+  async getLiveAll(@CurrentUser() user: UserContext) {
+    return this.trackingService.getLiveAll(user);
+  }
+
   @Get('live')
   @ApiOperation({ summary: 'Get current live state for one device' })
   @ApiResponse({ status: 200, description: 'Live tracking state' })
