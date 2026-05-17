@@ -16,7 +16,7 @@ import { PaymentRecord, PaymentRecordDocument, PaymentStatus } from '../../datab
 import { User, UserDocument } from '../../database/schemas/user.schema';
 import { Device, DeviceDocument } from '../../database/schemas/device.schema';
 import { CreateSubscriptionDto, AdminCreateSubscriptionDto, AdminRenewSubscriptionDto } from './dto';
-import { FcmService } from '../fcm/fcm.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class SubscriptionsService implements OnModuleInit {
@@ -30,7 +30,7 @@ export class SubscriptionsService implements OnModuleInit {
     @InjectModel(PaymentRecord.name) private paymentRecordModel: Model<PaymentRecordDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Device.name) private deviceModel: Model<DeviceDocument>,
-    private readonly fcmService: FcmService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async onModuleInit() {
@@ -108,10 +108,10 @@ export class SubscriptionsService implements OnModuleInit {
     }
   }
 
-  // Runs once daily at 9:00 AM — sends push reminders 7 days and 3 days before expiry.
+  // Runs once daily at 9:00 AM — sends push reminders 7, 3, and 1 day before expiry.
   @Cron('0 9 * * *')
   async sendExpiryReminders() {
-    const REMINDER_DAYS = [7, 3];
+    const REMINDER_DAYS = [7, 3, 1];
 
     for (const daysLeft of REMINDER_DAYS) {
       try {
@@ -145,15 +145,13 @@ export class SubscriptionsService implements OnModuleInit {
             year: 'numeric',
           });
 
-          await this.fcmService.sendToToken(
-            user.fcmToken,
-            `Subscription Expiring in ${daysLeft} Days`,
-            `Hi ${displayName}, your ${sub.planName} plan expires on ${expiryDate}. Please renew to avoid service interruption.`,
-            {
-              type: 'SUBSCRIPTION_EXPIRY_REMINDER',
-              daysLeft: String(daysLeft),
-              expiryDate: new Date(sub.endDate).toISOString(),
-            },
+          const title = `Subscription Expiring in ${daysLeft} Day${daysLeft > 1 ? 's' : ''}`;
+          const body = `Hi ${displayName}, your ${sub.planName} plan expires on ${expiryDate}. Please renew to avoid service interruption.`;
+
+          await this.notificationsService.sendPaymentReminderToUser(
+            String(sub.userId),
+            title,
+            body,
           );
 
           this.logger.log(
@@ -163,6 +161,48 @@ export class SubscriptionsService implements OnModuleInit {
       } catch (error) {
         this.logger.error(`Error sending ${daysLeft}-day expiry reminders: ${error}`);
       }
+    }
+  }
+
+  // Runs daily at 10:00 AM — notifies users whose subscription expired yesterday.
+  @Cron('0 10 * * *')
+  async sendOverdueReminders() {
+    try {
+      const windowStart = new Date();
+      windowStart.setDate(windowStart.getDate() - 1);
+      windowStart.setHours(0, 0, 0, 0);
+
+      const windowEnd = new Date(windowStart);
+      windowEnd.setHours(23, 59, 59, 999);
+
+      const expiredSubs = await this.subscriptionModel
+        .find({
+          status: SubscriptionStatus.EXPIRED,
+          endDate: { $gte: windowStart, $lte: windowEnd },
+        })
+        .select('userId planName endDate')
+        .lean();
+
+      for (const sub of expiredSubs) {
+        const user = await this.userModel
+          .findById(sub.userId)
+          .select('fcmToken firstName')
+          .lean();
+
+        if (!user?.fcmToken) continue;
+
+        const displayName = user.firstName ?? 'there';
+
+        await this.notificationsService.sendPaymentReminderToUser(
+          String(sub.userId),
+          'Subscription Expired — Renew Now',
+          `Hi ${displayName}, your ${sub.planName} plan has expired. Renew immediately to restore GPS tracking access.`,
+        );
+
+        this.logger.log(`Sent overdue reminder to user ${String(sub.userId)}`);
+      }
+    } catch (error) {
+      this.logger.error(`Error sending overdue reminders: ${error}`);
     }
   }
 

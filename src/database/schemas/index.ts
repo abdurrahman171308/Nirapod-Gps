@@ -13,3 +13,4 @@ export * from './payment-record.schema';
 export * from './division.schema';
 export * from './district.schema';
 export * from './upazila.schema';
+export * from './notification.schema';

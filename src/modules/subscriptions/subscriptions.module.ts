@@ -9,11 +9,11 @@ import { Coupon, CouponSchema } from '../../database/schemas/coupon.schema';
 import { PaymentRecord, PaymentRecordSchema } from '../../database/schemas/payment-record.schema';
 import { User, UserSchema } from '../../database/schemas/user.schema';
 import { Device, DeviceSchema } from '../../database/schemas/device.schema';
-import { FcmModule } from '../fcm/fcm.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    FcmModule,
+    NotificationsModule,
     MongooseModule.forFeature([
       { name: Plan.name, schema: PlanSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
