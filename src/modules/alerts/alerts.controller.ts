@@ -134,6 +134,15 @@ export class AlertsController {
     return this.alertsService.getLatestUnacknowledged(user);
   }
 
+  @Patch('read-all')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mark all unread alerts as read for current user' })
+  @ApiResponse({ status: 200, description: 'Count of alerts marked as read' })
+  async markAllAsRead(@CurrentUser() user: UserContext) {
+    const count = await this.alertsService.markAllAsRead(user);
+    return { markedAsRead: count };
+  }
+
   @Patch(':id/read')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark a single alert as read' })
@@ -142,14 +151,5 @@ export class AlertsController {
   @ApiResponse({ status: 404, description: 'Alert not found' })
   async markAsRead(@Param('id') id: string, @CurrentUser() user: UserContext) {
     return this.alertsService.markAsRead(id, user);
-  }
-
-  @Patch('read-all')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Mark all unread alerts as read for current user' })
-  @ApiResponse({ status: 200, description: 'Count of alerts marked as read' })
-  async markAllAsRead(@CurrentUser() user: UserContext) {
-    const count = await this.alertsService.markAllAsRead(user);
-    return { markedAsRead: count };
   }
 }
