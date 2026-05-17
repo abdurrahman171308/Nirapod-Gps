@@ -23,6 +23,7 @@ import { CouponsModule } from './modules/coupons/coupons.module';
 import { FcmModule } from './modules/fcm/fcm.module';
 import { AddressModule } from './modules/address/address.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ContentModule } from './modules/content/content.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -64,6 +65,7 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
     FcmModule,
     AddressModule,
     NotificationsModule,
+    ContentModule,
   ],
   providers: [
     {

@@ -14,3 +14,4 @@ export * from './division.schema';
 export * from './district.schema';
 export * from './upazila.schema';
 export * from './notification.schema';
+export * from './content.schema';
