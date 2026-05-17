@@ -78,7 +78,8 @@ export class ContentAdminController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List all content items (Admin only)' })
+  @Roles(Role.ADMIN, Role.USER)
+  @ApiOperation({ summary: 'List all content items (any logged-in user)' })
   @ApiQuery({ name: 'type', enum: ContentType, required: false, description: 'Filter by type' })
   @ApiResponse({ status: 200, description: 'All content items' })
   async findAll(@Query('type') type?: ContentType) {
@@ -86,7 +87,8 @@ export class ContentAdminController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get content item by ID (Admin only)' })
+  @Roles(Role.ADMIN, Role.USER)
+  @ApiOperation({ summary: 'Get content item by ID (any logged-in user)' })
   @ApiParam({ name: 'id', description: 'Content item ID' })
   @ApiResponse({ status: 200, description: 'Content item details' })
   @ApiResponse({ status: 404, description: 'Not found' })
