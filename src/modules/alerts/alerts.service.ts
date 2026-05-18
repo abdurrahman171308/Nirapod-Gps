@@ -308,13 +308,41 @@ export class AlertsService {
 
   /** Mark all unread alerts for the user's devices as read */
   async markAllAsRead(user: UserContext): Promise<number> {
+    const now = new Date();
+    const userId = new Types.ObjectId(user.userId);
+
+    if (user.role === Role.ADMIN) {
+      const result = await this.alertModel
+        .updateMany(
+          { $or: [{ isRead: false }, { isAcknowledged: false }] },
+          {
+            isRead: true,
+            readAt: now,
+            isAcknowledged: true,
+            acknowledgedAt: now,
+            acknowledgedBy: userId,
+          },
+        )
+        .exec();
+      return result.modifiedCount;
+    }
+
     const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
     if (assignedImeis.length === 0) return 0;
 
     const result = await this.alertModel
       .updateMany(
-        { imei: { $in: assignedImeis }, isRead: false },
-        { isRead: true, readAt: new Date() },
+        {
+          imei: { $in: assignedImeis },
+          $or: [{ isRead: false }, { isAcknowledged: false }],
+        },
+        {
+          isRead: true,
+          readAt: now,
+          isAcknowledged: true,
+          acknowledgedAt: now,
+          acknowledgedBy: userId,
+        },
       )
       .exec();
 
