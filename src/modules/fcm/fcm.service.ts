@@ -77,8 +77,8 @@ export class FcmService implements OnModuleInit {
 
       this.logger.debug(`Push sent to token ${token.slice(0, 20)}…`);
     } catch (err: any) {
-      // Token is stale / unregistered — caller should handle cleanup if needed
       this.logger.warn(`FCM send failed: ${err?.message ?? err}`);
+      throw err;
     }
   }
 }
