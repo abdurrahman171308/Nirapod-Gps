@@ -12,11 +12,20 @@ export class FcmService implements OnModuleInit {
   onModuleInit() {
     const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
     const clientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL');
-    const privateKey = this.configService
-      .get<string>('FIREBASE_PRIVATE_KEY')
-      ?.replace(/\\n/g, '\n');
 
-    if (!projectId || !clientEmail || !privateKey) {
+    const rawKey =
+      this.configService.get<string>('FIREBASE_PRIVATE_KEY_B64') ??
+      this.configService.get<string>('FIREBASE_PRIVATE_KEY');
+
+    // Decode Base64 if the key doesn't start with a PEM header (Railway-safe encoding).
+    // Otherwise normalise escaped newlines — handles both \\n (double-escaped) and \n (single).
+    const privateKey = !rawKey
+      ? undefined
+      : !rawKey.trimStart().startsWith('-----BEGIN')
+        ? Buffer.from(rawKey, 'base64').toString('utf8')
+        : rawKey.replace(/\\n/g, '\n');
+
+    if (!projectId || !clientEmail || !privateKey || !privateKey.includes('-----BEGIN')) {
       this.logger.warn('Firebase credentials not set — push notifications disabled.');
       return;
     }
