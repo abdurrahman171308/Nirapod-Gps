@@ -78,7 +78,10 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Invalid username or password');
     }
 
-    const tokens = await this.generateTokens(user, userAgent, ipAddress);
+    // Bump session version — any tokens from previous sessions become invalid immediately
+    const sessionVersion = await this.usersService.incrementSessionVersion(user._id);
+
+    const tokens = await this.generateTokens(user, sessionVersion, userAgent, ipAddress);
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -156,7 +159,7 @@ export class AuthService implements OnModuleInit {
         throw new UnauthorizedException('User not found or deactivated');
       }
 
-      const tokens = await this.generateTokens(user);
+      const tokens = await this.generateTokens(user, payload.sessionVersion ?? user.sessionVersion);
 
       return {
         accessToken: tokens.accessToken,
@@ -204,6 +207,7 @@ export class AuthService implements OnModuleInit {
 
   private async generateTokens(
     user: UserDocument,
+    sessionVersion: number,
     userAgent?: string,
     ipAddress?: string,
   ) {
@@ -211,6 +215,7 @@ export class AuthService implements OnModuleInit {
       sub: user._id.toString(),
       email: user.email,
       role: user.role,
+      sessionVersion,
     };
 
     const accessToken = await this.jwtService.signAsync(payload, {

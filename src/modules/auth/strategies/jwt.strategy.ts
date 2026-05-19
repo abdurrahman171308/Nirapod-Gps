@@ -9,6 +9,7 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  sessionVersion?: number;
 }
 
 const extractJwtFromCookie = (req: Request): string | null => {
@@ -41,6 +42,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     if (!user.isActive) {
       throw new UnauthorizedException('User account is deactivated');
+    }
+
+    // Reject tokens issued before the latest login (new device logged in)
+    if (payload.sessionVersion !== undefined && payload.sessionVersion !== user.sessionVersion) {
+      throw new UnauthorizedException('Session expired. Please log in again.');
     }
 
     return {

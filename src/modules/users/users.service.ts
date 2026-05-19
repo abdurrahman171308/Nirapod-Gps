@@ -232,4 +232,13 @@ export class UsersService {
     const user = await this.userModel.findById(userId).select('fcmToken').lean().exec();
     return user?.fcmToken ?? null;
   }
+
+  async incrementSessionVersion(userId: string | Types.ObjectId): Promise<number> {
+    const updated = await this.userModel
+      .findByIdAndUpdate(userId, { $inc: { sessionVersion: 1 } }, { new: true })
+      .select('sessionVersion')
+      .lean()
+      .exec();
+    return updated?.sessionVersion ?? 1;
+  }
 }

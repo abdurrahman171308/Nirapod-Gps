@@ -63,6 +63,9 @@ export class User {
   @Prop()
   fcmToken?: string;
 
+  @Prop({ default: 1 })
+  declare sessionVersion: number;
+
   declare createdAt: Date;
   declare updatedAt: Date;
 }
