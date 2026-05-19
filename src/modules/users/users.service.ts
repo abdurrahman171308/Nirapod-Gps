@@ -200,6 +200,14 @@ export class UsersService {
     return user;
   }
 
+  async updateRole(id: string, role: Role): Promise<UserDocument> {
+    const user = await this.userModel
+      .findByIdAndUpdate(id, { role }, { new: true })
+      .exec();
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
   async setActiveStatus(id: string, isActive: boolean): Promise<UserDocument> {
     const user = await this.userModel
       .findByIdAndUpdate(id, { isActive }, { new: true })

@@ -1,5 +1,6 @@
-import { IsOptional, IsString, IsNumber, MinLength, MaxLength, IsNotEmpty, ValidateNested } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsNumber, IsEnum, MinLength, MaxLength, IsNotEmpty, ValidateNested } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Role } from '../../../common/enums/roles.enum';
 import { Type } from 'class-transformer';
 
 export class UpdateAddressDto {
@@ -82,4 +83,10 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(6)
   declare newPassword: string;
+}
+
+export class UpdateRoleDto {
+  @ApiProperty({ enum: Role, example: Role.ADMIN })
+  @IsEnum(Role)
+  declare role: Role;
 }

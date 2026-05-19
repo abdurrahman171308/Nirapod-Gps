@@ -17,7 +17,7 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { UpdateProfileDto, ChangePasswordDto } from './dto/update-profile.dto';
+import { UpdateProfileDto, ChangePasswordDto, UpdateRoleDto } from './dto/update-profile.dto';
 import { CurrentUser, Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards';
 import { Role } from '../../common/enums/roles.enum';
@@ -107,6 +107,17 @@ export class UsersController {
       phone: dto.phone,
       address: dto.address,
     });
+    return this.sanitize(user);
+  }
+
+  @Patch(':id/role')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change a user role (Admin only)' })
+  @ApiParam({ name: 'id', description: 'User MongoDB ID' })
+  @ApiResponse({ status: 200, description: 'Role updated' })
+  async updateRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
+    const user = await this.usersService.updateRole(id, dto.role);
     return this.sanitize(user);
   }
 
