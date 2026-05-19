@@ -97,7 +97,7 @@ export class DashboardService {
   }
 
   private async getAdminSummary() {
-    const [totalDevices, activeAlerts, totalUsers, devices, activeSubscriptions, usersWithActiveSubCount] =
+    const [totalDevices, activeAlerts, totalUsers, devices, usersWithActiveSubCount] =
       await Promise.all([
       this.deviceModel.countDocuments({}).exec(),
       this.alertModel.countDocuments({ isAcknowledged: false }).exec(),
@@ -107,14 +107,6 @@ export class DashboardService {
         .select(
           'imei name isOnline lastLat lastLng lastSpeed lastSeenAt lastIgnition lastIgnitionAt',
         )
-        .lean()
-        .exec(),
-      this.subscriptionModel
-        .find({
-          status: SubscriptionStatus.ACTIVE,
-          endDate: { $gt: new Date() },
-        })
-        .select('subscribedDeviceIds')
         .lean()
         .exec(),
       this.subscriptionModel
@@ -149,12 +141,6 @@ export class DashboardService {
         lastIgnitionAt: d.lastIgnitionAt,
       }));
 
-    const coveredDeviceIds = this.buildCoveredDeviceIdSet(activeSubscriptions);
-    const subscriptionCounts = this.summarizeSubscriptionCoverage(
-      devices,
-      coveredDeviceIds,
-    );
-
     return {
       devices: {
         total: totalDevices,
@@ -163,12 +149,13 @@ export class DashboardService {
         engineOn: engineOnCount,
         engineOff: engineOffCount,
       },
-      subscriptions: subscriptionCounts,
       alerts: {
         unacknowledged: activeAlerts,
       },
       users: {
         total: totalUsers,
+      },
+      userSubscriptions: {
         withActiveSubscription: usersWithActiveSubCount,
         withoutActiveSubscription: Math.max(0, totalUsers - usersWithActiveSubCount),
       },
