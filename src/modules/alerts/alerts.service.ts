@@ -59,7 +59,7 @@ export class AlertsService {
     const savedAlert = await alert.save();
 
     // Fire FCM push to the device owner (non-blocking)
-    this.sendPushForAlert(deviceId, imei, type, message).catch((err) =>
+    this.sendPushForAlert(deviceId, type, message).catch((err) =>
       this.logger.error(`FCM push error: ${err}`),
     );
 
@@ -371,11 +371,10 @@ export class AlertsService {
 
   private async sendPushForAlert(
     deviceId: Types.ObjectId,
-    imei: string,
     type: AlertType,
     message: string,
   ): Promise<void> {
-    const device = await this.deviceModel.findById(deviceId).select('assignedUserId').lean().exec();
+    const device = await this.deviceModel.findById(deviceId).select('assignedUserId name plateNumber').lean().exec();
     if (!device?.assignedUserId) return;
 
     const fcmToken = await this.usersService.getFcmTokenByUserId(
@@ -384,7 +383,8 @@ export class AlertsService {
     if (!fcmToken) return;
 
     await this.fcmService.sendToToken(fcmToken, `Alert: ${type}`, message, {
-      imei,
+      deviceName: device.name,
+      plateNumber: device.plateNumber ?? '',
       type,
       alertId: deviceId.toString(),
     });
@@ -460,9 +460,12 @@ export class AlertsService {
       if (!device) return;
 
       const type = curr ? AlertType.ENGINE_ON : AlertType.ENGINE_OFF;
+      const deviceLabel = device.plateNumber
+        ? `${device.name} (${device.plateNumber})`
+        : device.name;
       const message = curr
-        ? `Engine turned ON for device ${telemetry.imei}`
-        : `Engine turned OFF for device ${telemetry.imei}`;
+        ? `Engine turned ON for ${deviceLabel}`
+        : `Engine turned OFF for ${deviceLabel}`;
 
       await this.create(
         device._id,
