@@ -87,6 +87,7 @@ export class UsersService {
     email: string,
     password: string,
     username?: string,
+    phone?: string,
   ): Promise<UserDocument | null> {
     const existingUser = await this.findByEmail(email);
 
@@ -101,10 +102,34 @@ export class UsersService {
         existingUser.username = username.toLowerCase();
         dirty = true;
       }
+      if (phone && !existingUser.phone) {
+        existingUser.phone = phone;
+        dirty = true;
+      }
       return dirty ? existingUser.save() : existingUser;
     }
 
-    return this.create(email, password, Role.ADMIN, undefined, undefined, username);
+    if (!username) {
+      throw new BadRequestException(
+        'ADMIN_USERNAME must be set to create the admin user',
+      );
+    }
+
+    if (!phone) {
+      throw new BadRequestException(
+        'ADMIN_PHONE must be set to create the admin user',
+      );
+    }
+
+    return this.create(
+      email,
+      password,
+      Role.ADMIN,
+      undefined,
+      undefined,
+      username,
+      phone,
+    );
   }
 
   async deactivateUser(id: string): Promise<UserDocument> {

@@ -41,6 +41,7 @@ export class AuthService implements OnModuleInit {
     const adminEmail = this.configService.get<string>('ADMIN_EMAIL');
     const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
     const adminUsername = this.configService.get<string>('ADMIN_USERNAME');
+    const adminPhone = this.configService.get<string>('ADMIN_PHONE');
 
     if (!adminEmail || !adminPassword) {
       this.logger.warn('ADMIN_EMAIL or ADMIN_PASSWORD not set in environment');
@@ -51,10 +52,23 @@ export class AuthService implements OnModuleInit {
       this.logger.warn('ADMIN_USERNAME not set — admin may not be able to log in');
     }
 
-    const result = await this.usersService.seedAdmin(adminEmail, adminPassword, adminUsername);
+    try {
+      const result = await this.usersService.seedAdmin(
+        adminEmail,
+        adminPassword,
+        adminUsername,
+        adminPhone,
+      );
 
-    if (result) {
-      this.logger.log(`Admin user seeded/updated: ${adminEmail} (@${adminUsername ?? 'no-username'})`);
+      if (result) {
+        this.logger.log(
+          `Admin user seeded/updated: ${adminEmail} (@${adminUsername ?? 'no-username'})`,
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown admin seed error';
+      this.logger.error(`Admin user seed failed: ${message}`);
     }
   }
 

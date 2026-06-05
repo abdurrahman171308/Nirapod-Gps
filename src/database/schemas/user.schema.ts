@@ -74,4 +74,3 @@ export const UserSchema = SchemaFactory.createForClass(User);
 
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
-UserSchema.index({ username: 1 });
