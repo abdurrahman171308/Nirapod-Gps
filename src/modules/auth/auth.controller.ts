@@ -22,7 +22,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { CookieOptions, Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto } from './dto';
+import { LoginDto, RegisterDto, SessionTokenDto } from './dto';
 import { CurrentUser, Public } from '../../common/decorators';
 import {
   getAccessCookieMaxAge,
@@ -72,6 +72,10 @@ export class AuthController {
   private clearTokenCookies(res: Response) {
     res.clearCookie('accessToken', this.cookieOptions);
     res.clearCookie('refreshToken', this.cookieOptions);
+  }
+
+  private getRefreshToken(req: Request, dto?: SessionTokenDto): string | undefined {
+    return req.cookies?.refreshToken || dto?.refreshToken;
   }
 
   @Post('register')
@@ -175,6 +179,8 @@ export class AuthController {
         data: {
           type: 'object',
           properties: {
+            accessToken: { type: 'string' },
+            refreshToken: { type: 'string' },
             user: {
               type: 'object',
               properties: {
@@ -216,16 +222,57 @@ export class AuthController {
 
     this.setTokenCookies(res, result.accessToken, result.refreshToken);
 
-    return { user: result.user };
+    return {
+      user: result.user,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    };
   }
-  
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token using cookie or request body' })
+  @ApiBody({ type: SessionTokenDto, required: false })
+  @ApiResponse({
+    status: 200,
+    description: 'Tokens refreshed successfully',
+    schema: {
+      properties: {
+        success: { type: 'boolean', example: true },
+        data: {
+          type: 'object',
+          properties: {
+            accessToken: { type: 'string' },
+            refreshToken: { type: 'string' },
+          },
+        },
+      },
+    },
+  })
+  async refresh(
+    @Req() req: Request,
+    @Body() dto: SessionTokenDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const tokens = await this.authService.refresh(this.getRefreshToken(req, dto));
+    this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
+    return tokens;
+  }
+
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth()
   @ApiOperation({ summary: 'User logout - clears HTTP-only cookies' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies?.refreshToken;
+  @ApiBody({ type: SessionTokenDto, required: false })
+  async logout(
+    @Req() req: Request,
+    @Body() dto: SessionTokenDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = this.getRefreshToken(req, dto);
 
     if (refreshToken) {
       await this.authService.logout(refreshToken);
