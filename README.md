@@ -73,6 +73,11 @@ ADMIN_PHONE=+8801712345678
 
 TCP_PORT=5023
 PORT=3000
+APP_URL=http://localhost:3000
+COOKIE_SECURE=false
+COOKIE_SAME_SITE=lax
+COOKIE_DOMAIN=
+CORS_ORIGINS=http://localhost:3001
 ```
 
 ### 4. Run
@@ -165,8 +170,10 @@ src/
 
 1. Change JWT secrets in production.
 2. Restrict `CORS_ORIGINS` in production.
-3. Use HTTPS in production.
-4. Restrict inbound access to the TCP port where possible.
+3. If the admin panel and API are on different origins, use `COOKIE_SECURE=true` and `COOKIE_SAME_SITE=none`.
+4. Set `COOKIE_DOMAIN` only when you intentionally want to share cookies across subdomains.
+5. Use HTTPS in production.
+6. Restrict inbound access to the TCP port where possible.
 
 ## License
 

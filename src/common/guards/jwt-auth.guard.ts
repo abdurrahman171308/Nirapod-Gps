@@ -7,16 +7,20 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { Request, Response } from 'express';
+import { CookieOptions, Request, Response } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AuthService } from '../../modules/auth/auth.service';
+import {
+  getAccessCookieMaxAge,
+  getAuthCookieBaseOptions,
+  getRefreshCookieMaxAge,
+} from '../utils';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  private readonly isProduction: boolean;
+  private readonly cookieOptions: CookieOptions;
   private readonly cookieMaxAge: number;
   private readonly refreshCookieMaxAge: number;
-  private readonly cookieSameSite: 'lax' | 'none';
 
   /**
    * Per-refreshToken in-flight lock.
@@ -40,10 +44,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     private readonly configService: ConfigService,
   ) {
     super();
-    this.isProduction = configService.get<string>('COOKIE_SECURE') === 'true';
-    this.cookieMaxAge = this.parseExpiration(configService.get<string>('JWT_ACCESS_EXPIRES') || '15m');
-    this.refreshCookieMaxAge = this.parseExpiration(configService.get<string>('JWT_REFRESH_EXPIRES') || '7d');
-    this.cookieSameSite = this.isProduction ? 'none' : 'lax';
+    this.cookieOptions = getAuthCookieBaseOptions(configService);
+    this.cookieMaxAge = getAccessCookieMaxAge(configService);
+    this.refreshCookieMaxAge = getRefreshCookieMaxAge(configService);
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -116,33 +119,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     refreshToken: string,
   ) {
     res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: this.isProduction,
-      sameSite: this.cookieSameSite,
+      ...this.cookieOptions,
       maxAge: this.cookieMaxAge,
-      path: '/',
     });
 
     res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: this.isProduction,
-      sameSite: this.cookieSameSite,
+      ...this.cookieOptions,
       maxAge: this.refreshCookieMaxAge,
-      path: '/',
     });
-  }
-
-  private parseExpiration(expiration: string): number {
-    const match = expiration.match(/^(\d+)([smhd])$/);
-    if (!match) return 15 * 60 * 1000;
-    const value = parseInt(match[1], 10);
-    switch (match[2]) {
-      case 's': return value * 1000;
-      case 'm': return value * 60 * 1000;
-      case 'h': return value * 60 * 60 * 1000;
-      case 'd': return value * 24 * 60 * 60 * 1000;
-      default:  return 15 * 60 * 1000;
-    }
   }
 
   handleRequest(

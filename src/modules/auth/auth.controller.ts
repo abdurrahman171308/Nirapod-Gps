@@ -19,11 +19,16 @@ import {
 } from '@nestjs/swagger';
 import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { Request, Response } from 'express';
+import { CookieOptions, Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto';
 import { CurrentUser, Public } from '../../common/decorators';
+import {
+  getAccessCookieMaxAge,
+  getAuthCookieBaseOptions,
+  getRefreshCookieMaxAge,
+} from '../../common/utils';
 
 class RegisterFcmTokenDto {
   @ApiProperty({ example: 'fcm-device-token-xyz', description: 'FCM device token from the mobile app' })
@@ -35,32 +40,17 @@ class RegisterFcmTokenDto {
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  private readonly isProduction: boolean;
+  private readonly cookieOptions: CookieOptions;
   private readonly cookieMaxAge: number;
   private readonly refreshCookieMaxAge: number;
-  private readonly cookieSameSite: 'lax' | 'none';
 
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {
-    this.isProduction = configService.get<string>('COOKIE_SECURE') === 'true';
-    this.cookieMaxAge = this.parseExpiration(configService.get<string>('JWT_ACCESS_EXPIRES') || '15m');
-    this.refreshCookieMaxAge = this.parseExpiration(configService.get<string>('JWT_REFRESH_EXPIRES') || '7d');
-    this.cookieSameSite = this.isProduction ? 'none' : 'lax';
-  }
-
-  private parseExpiration(expiration: string): number {
-    const match = expiration.match(/^(\d+)([smhd])$/);
-    if (!match) return 15 * 60 * 1000;
-    const value = parseInt(match[1], 10);
-    switch (match[2]) {
-      case 's': return value * 1000;
-      case 'm': return value * 60 * 1000;
-      case 'h': return value * 60 * 60 * 1000;
-      case 'd': return value * 24 * 60 * 60 * 1000;
-      default:  return 15 * 60 * 1000;
-    }
+    this.cookieOptions = getAuthCookieBaseOptions(configService);
+    this.cookieMaxAge = getAccessCookieMaxAge(configService);
+    this.refreshCookieMaxAge = getRefreshCookieMaxAge(configService);
   }
 
   private setTokenCookies(
@@ -69,35 +59,19 @@ export class AuthController {
     refreshToken: string,
   ) {
     res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: this.isProduction,
-      sameSite: this.cookieSameSite,
+      ...this.cookieOptions,
       maxAge: this.cookieMaxAge,
-      path: '/',
     });
 
     res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: this.isProduction,
-      sameSite: this.cookieSameSite,
+      ...this.cookieOptions,
       maxAge: this.refreshCookieMaxAge,
-      path: '/',
     });
   }
 
   private clearTokenCookies(res: Response) {
-    res.clearCookie('accessToken', {
-      path: '/',
-      httpOnly: true,
-      secure: this.isProduction,
-      sameSite: this.cookieSameSite,
-    });
-    res.clearCookie('refreshToken', {
-      path: '/',
-      httpOnly: true,
-      secure: this.isProduction,
-      sameSite: this.cookieSameSite,
-    });
+    res.clearCookie('accessToken', this.cookieOptions);
+    res.clearCookie('refreshToken', this.cookieOptions);
   }
 
   @Post('register')
