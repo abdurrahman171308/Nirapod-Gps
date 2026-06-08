@@ -190,6 +190,8 @@ export class GT06ParserService {
       const course = courseStatus & 0x03ff;
       const isEastLongitude = !((courseStatus >> 11) & 0x01);
       const isNorthLatitude = (courseStatus >> 10) & 0x01;
+      // Bit 8 of courseStatus is the ACC/ignition flag in GT06
+      const ignition = Boolean((courseStatus >> 8) & 0x01);
 
       if (!isNorthLatitude) lat = -lat;
       if (!isEastLongitude) lng = -lng;
@@ -209,6 +211,7 @@ export class GT06ParserService {
         lng,
         speed,
         course,
+        ignition,
         mcc,
         mnc,
         lac,
@@ -296,7 +299,7 @@ export class GT06ParserService {
     location: GT06LocationData,
     raw?: string,
   ): NormalizedTelemetry {
-    return {
+    const telemetry: NormalizedTelemetry = {
       imei,
       lat: location.lat,
       lng: location.lng,
@@ -307,6 +310,10 @@ export class GT06ParserService {
       satellites: location.satellites,
       raw,
     };
+    if (location.ignition !== undefined) {
+      telemetry.ignition = location.ignition;
+    }
+    return telemetry;
   }
 
   getProtocolName(protocolNumber: number): string {

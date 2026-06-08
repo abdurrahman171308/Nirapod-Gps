@@ -42,6 +42,7 @@ export interface GT06LocationData {
   lng: number;
   speed: number;
   course: number;
+  ignition?: boolean;
   mcc: number;
   mnc: number;
   lac: number;
