@@ -179,8 +179,6 @@ export class AuthController {
         data: {
           type: 'object',
           properties: {
-            accessToken: { type: 'string' },
-            refreshToken: { type: 'string' },
             user: {
               type: 'object',
               properties: {
@@ -224,8 +222,6 @@ export class AuthController {
 
     return {
       user: result.user,
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
     };
   }
 
@@ -257,7 +253,7 @@ export class AuthController {
   ) {
     const tokens = await this.authService.refresh(this.getRefreshToken(req, dto));
     this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
-    return tokens;
+    return { message: 'Tokens refreshed successfully' };
   }
 
   @Public()
