@@ -27,9 +27,7 @@ import { Role } from '../../common/enums/roles.enum';
 import { UsersService } from '../users/users.service';
 
 // Must be longer than the device's heartbeat interval with headroom.
-// Matches the TCP socket timeout (15 min) so a device is only marked offline
-// after the TCP connection itself would have dropped.
-export const ONLINE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+export const ONLINE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
 export const IGNITION_STATE_FRESH_MS = ONLINE_THRESHOLD_MS;
 
 export interface UserContext {
