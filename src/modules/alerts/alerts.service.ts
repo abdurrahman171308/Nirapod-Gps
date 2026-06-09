@@ -36,8 +36,8 @@ export class AlertsService {
   ) {}
 
   async create(
-    deviceId: Types.ObjectId,
-    imei: string,
+    deviceId: Types.ObjectId | undefined,
+    imei: string | undefined,
     type: AlertType,
     message: string,
     lat?: number,
@@ -46,8 +46,8 @@ export class AlertsService {
     meta?: Record<string, any>,
   ): Promise<AlertDocument> {
     const alert = new this.alertModel({
-      deviceId,
-      imei,
+      ...(deviceId && { deviceId }),
+      ...(imei && { imei }),
       type,
       message,
       lat,
@@ -58,10 +58,12 @@ export class AlertsService {
 
     const savedAlert = await alert.save();
 
-    // Fire FCM push to the device owner (non-blocking)
-    this.sendPushForAlert(deviceId, type, message).catch((err) =>
-      this.logger.error(`FCM push error: ${err}`),
-    );
+    // Fire FCM push to the device owner (non-blocking); skip for system notifications (no device)
+    if (deviceId) {
+      this.sendPushForAlert(deviceId, type, message).catch((err) =>
+        this.logger.error(`FCM push error: ${err}`),
+      );
+    }
 
     return savedAlert;
   }
@@ -161,8 +163,10 @@ export class AlertsService {
       throw new NotFoundException(`Alert with ID ${alertId} not found`);
     }
 
-    // Validate user has access to the device this alert belongs to
-    await this.devicesService.validateDeviceAccessByImei(alert.imei, user);
+    // Validate user has access to the device this alert belongs to (skip for system notifications)
+    if (alert.imei) {
+      await this.devicesService.validateDeviceAccessByImei(alert.imei, user);
+    }
 
     const updatedAlert = await this.alertModel
       .findByIdAndUpdate(
@@ -299,7 +303,9 @@ export class AlertsService {
     const alert = await this.alertModel.findById(alertId).exec();
     if (!alert) throw new NotFoundException(`Alert ${alertId} not found`);
 
-    await this.devicesService.validateDeviceAccessByImei(alert.imei, user);
+    if (alert.imei) {
+      await this.devicesService.validateDeviceAccessByImei(alert.imei, user);
+    }
 
     return this.alertModel
       .findByIdAndUpdate(alertId, { isRead: true, readAt: new Date() }, { new: true })

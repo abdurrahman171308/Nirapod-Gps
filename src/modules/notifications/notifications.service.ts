@@ -11,6 +11,8 @@ import {
 import { User, UserDocument } from '../../database/schemas/user.schema';
 import { FcmService } from '../fcm/fcm.service';
 import { SendNotificationDto } from './dto';
+import { AlertsService } from '../alerts/alerts.service';
+import { AlertType } from '../../common/enums/alert-type.enum';
 
 @Injectable()
 export class NotificationsService {
@@ -20,6 +22,7 @@ export class NotificationsService {
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly fcmService: FcmService,
+    private readonly alertsService: AlertsService,
   ) {}
 
   async send(dto: SendNotificationDto, adminId: string): Promise<NotificationDocument> {
@@ -73,6 +76,18 @@ export class NotificationsService {
       `Notification "${dto.title}" sent — ${sentCount} delivered, ${failedCount} failed`,
     );
 
+    // Save a copy in the alerts table so it appears in the notification inbox
+    await this.alertsService.create(
+      undefined,
+      undefined,
+      AlertType.SYSTEM_NOTIFICATION,
+      `${dto.title}: ${dto.body}`,
+      undefined,
+      undefined,
+      undefined,
+      { notificationId: record._id.toString(), type: dto.type, target },
+    );
+
     return record;
   }
 
@@ -107,6 +122,18 @@ export class NotificationsService {
     } catch (err) {
       this.logger.warn(`Payment reminder FCM failed for user ${userId}: ${err}`);
     }
+
+    // Save in alerts table regardless of FCM success so it appears in the inbox
+    await this.alertsService.create(
+      undefined,
+      undefined,
+      AlertType.SYSTEM_NOTIFICATION,
+      `${title}: ${body}`,
+      undefined,
+      undefined,
+      undefined,
+      { type: NotificationType.PAYMENT_REMINDER, userId },
+    );
   }
 
   private async resolveTargetUsers(

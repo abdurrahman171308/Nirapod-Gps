@@ -5,6 +5,7 @@ import { User, UserSchema } from '../../database/schemas/user.schema';
 import { FcmModule } from '../fcm/fcm.module';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
+import { AlertsModule } from '../alerts/alerts.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { NotificationsController } from './notifications.controller';
       { name: User.name, schema: UserSchema },
     ]),
     FcmModule,
+    AlertsModule,
   ],
   providers: [NotificationsService],
   controllers: [NotificationsController],

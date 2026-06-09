@@ -6,48 +6,48 @@ export type AlertDocument = Alert & Document;
 
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
 export class Alert {
-  _id: Types.ObjectId;
+  declare _id: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Device', required: true })
-  deviceId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Device' })
+  declare deviceId?: Types.ObjectId;
 
-  @Prop({ required: true, index: true })
-  imei: string;
+  @Prop({ index: true })
+  declare imei?: string;
 
   @Prop({ type: String, enum: AlertType, required: true })
-  type: AlertType;
+  declare type: AlertType;
 
   @Prop({ required: true })
-  message: string;
+  declare message: string;
 
   @Prop()
-  lat?: number;
+  declare lat?: number;
 
   @Prop()
-  lng?: number;
+  declare lng?: number;
 
   @Prop()
-  speed?: number;
+  declare speed?: number;
 
   @Prop({ type: Object })
-  meta?: Record<string, any>;
+  declare meta?: Record<string, any>;
 
   @Prop({ default: false })
-  isAcknowledged: boolean;
+  declare isAcknowledged: boolean;
 
   @Prop()
-  acknowledgedAt?: Date;
+  declare acknowledgedAt?: Date;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
-  acknowledgedBy?: Types.ObjectId;
+  declare acknowledgedBy?: Types.ObjectId;
 
   @Prop({ default: false })
-  isRead: boolean;
+  declare isRead: boolean;
 
   @Prop()
-  readAt?: Date;
+  declare readAt?: Date;
 
-  createdAt: Date;
+  declare createdAt: Date;
 }
 
 export const AlertSchema = SchemaFactory.createForClass(Alert);
