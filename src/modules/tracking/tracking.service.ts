@@ -60,7 +60,7 @@ export class TrackingService {
           plateNumber: device.plateNumber,
           isOnline,
           engineOn: liveLocation ? (liveLocation.ignition ?? null) : null,
-          lastSeenAt: device.lastSeenAt,
+          lastSeenAt: device.lastIgnitionChangedAt ?? null,
           latestLocation: liveLocation,
         };
       }),
@@ -83,7 +83,7 @@ export class TrackingService {
     return {
       imei,
       isOnline,
-      lastSeenAt: device.lastSeenAt,
+      lastSeenAt: device.lastIgnitionChangedAt ?? null,
       latestLocation: this.buildLiveLocation(latestLocation, device, isOnline),
     };
   }

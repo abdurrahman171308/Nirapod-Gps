@@ -399,13 +399,7 @@ export class AlertsService {
   @OnEvent(GPS_LOCATION_EVENT)
   async checkOverspeed(telemetry: NormalizedTelemetry): Promise<void> {
     try {
-      const device = await this.deviceModel
-        .findOne({ imei: telemetry.imei })
-        .exec();
-
-      if (!device) {
-        return;
-      }
+      const device = await this.devicesService.getOrCreateDevice(telemetry.imei);
 
       if (telemetry.speed > device.speedLimitKph) {
         const alertKey = `${telemetry.imei}:${AlertType.OVERSPEED}`;
@@ -451,19 +445,18 @@ export class AlertsService {
     const prev = this.ignitionState.get(telemetry.imei);
     const curr = telemetry.ignition;
 
-    // First data point — just record state, don't fire an alert
-    if (prev === undefined) {
+    if (prev === curr) return;
+
+    // First data point with ignition=OFF — just record, no alert needed
+    if (prev === undefined && !curr) {
       this.ignitionState.set(telemetry.imei, curr);
       return;
     }
 
-    if (prev === curr) return;
-
     this.ignitionState.set(telemetry.imei, curr);
 
     try {
-      const device = await this.deviceModel.findOne({ imei: telemetry.imei }).exec();
-      if (!device) return;
+      const device = await this.devicesService.getOrCreateDevice(telemetry.imei);
 
       const type = curr ? AlertType.ENGINE_ON : AlertType.ENGINE_OFF;
       const deviceLabel = device.plateNumber
@@ -473,16 +466,19 @@ export class AlertsService {
         ? `Engine turned ON for ${deviceLabel}`
         : `Engine turned OFF for ${deviceLabel}`;
 
-      await this.create(
-        device._id,
-        telemetry.imei,
-        type,
-        message,
-        telemetry.lat,
-        telemetry.lng,
-        telemetry.speed,
-        { deviceTime: telemetry.deviceTime },
-      );
+      await Promise.all([
+        this.create(
+          device._id,
+          telemetry.imei,
+          type,
+          message,
+          telemetry.lat,
+          telemetry.lng,
+          telemetry.speed,
+          { deviceTime: telemetry.deviceTime },
+        ),
+        this.devicesService.recordIgnitionChange(telemetry.imei, telemetry.serverTime),
+      ]);
 
       this.logger.log(`Ignition ${curr ? 'ON' : 'OFF'}: ${telemetry.imei}`);
     } catch (error) {
@@ -499,13 +495,7 @@ export class AlertsService {
   @OnEvent(GPS_ALARM_EVENT)
   async handleDeviceAlarm(alarmData: any): Promise<void> {
     try {
-      const device = await this.deviceModel
-        .findOne({ imei: alarmData.imei })
-        .exec();
-
-      if (!device) {
-        return;
-      }
+      const device = await this.devicesService.getOrCreateDevice(alarmData.imei);
 
       let alertType: AlertType;
       switch (alarmData.alarmType) {

@@ -55,6 +55,9 @@ export class Device {
   @Prop()
   lastIgnitionAt?: Date;
 
+  @Prop()
+  lastIgnitionChangedAt?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }
