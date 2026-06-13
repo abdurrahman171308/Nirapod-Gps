@@ -296,10 +296,12 @@ export class AlertsService {
     }
 
     const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
-    if (assignedImeis.length === 0) return [];
+
+    const orClauses: any[] = [{ type: AlertType.SYSTEM_NOTIFICATION }];
+    if (assignedImeis.length > 0) orClauses.push({ imei: { $in: assignedImeis } });
 
     return this.alertModel
-      .find({ imei: { $in: assignedImeis }, isAcknowledged: false })
+      .find({ isAcknowledged: false, $or: orClauses })
       .sort({ createdAt: -1 })
       .limit(5)
       .lean()
@@ -342,13 +344,15 @@ export class AlertsService {
     }
 
     const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
-    if (assignedImeis.length === 0) return 0;
+
+    const deviceOrClauses: any[] = [{ type: AlertType.SYSTEM_NOTIFICATION }];
+    if (assignedImeis.length > 0) deviceOrClauses.push({ imei: { $in: assignedImeis } });
 
     const result = await this.alertModel
       .updateMany(
         {
-          imei: { $in: assignedImeis },
-          $or: [{ isRead: false }, { isAcknowledged: false }],
+          $or: deviceOrClauses,
+          $and: [{ $or: [{ isRead: false }, { isAcknowledged: false }] }],
         },
         {
           isRead: true,
@@ -370,16 +374,13 @@ export class AlertsService {
     }
 
     // For regular users, count only alerts for their assigned devices
-    const assignedImeis = await this.devicesService.getAssignedImeis(
-      user.userId,
-    );
+    const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
 
-    if (assignedImeis.length === 0) {
-      return 0;
-    }
+    const orClauses: any[] = [{ type: AlertType.SYSTEM_NOTIFICATION }];
+    if (assignedImeis.length > 0) orClauses.push({ imei: { $in: assignedImeis } });
 
     return this.alertModel
-      .countDocuments({ isAcknowledged: false, imei: { $in: assignedImeis } })
+      .countDocuments({ isAcknowledged: false, $or: orClauses })
       .exec();
   }
 
