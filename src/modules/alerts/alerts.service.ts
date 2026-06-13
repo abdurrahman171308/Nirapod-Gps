@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Alert, AlertDocument } from '../../database/schemas/alert.schema';
 import { Device, DeviceDocument } from '../../database/schemas/device.schema';
 import { AlertType } from '../../common/enums/alert-type.enum';
@@ -26,6 +27,8 @@ export class AlertsService {
   private readonly ALERT_COOLDOWN_MS = 60000;
   // Tracks last known ignition state per device to detect ON/OFF transitions
   private ignitionState: Map<string, boolean> = new Map();
+  // How long a device must be silent with engine-ON before we treat it as engine-OFF
+  private readonly STALE_ENGINE_MS = 4 * 60 * 1000; // 4 minutes
 
   constructor(
     @InjectModel(Alert.name) private alertModel: Model<AlertDocument>,
@@ -247,10 +250,15 @@ export class AlertsService {
     const filter: any = {};
     if (user.role !== Role.ADMIN) {
       const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
+      // Always include SYSTEM_NOTIFICATION (broadcast alerts have no imei)
       if (assignedImeis.length === 0) {
-        return { alerts: [], total: 0, unreadCount: 0 };
+        filter.$or = [{ type: AlertType.SYSTEM_NOTIFICATION }];
+      } else {
+        filter.$or = [
+          { imei: { $in: assignedImeis } },
+          { type: AlertType.SYSTEM_NOTIFICATION },
+        ];
       }
-      filter.imei = { $in: assignedImeis };
     }
     if (query.type) filter.type = query.type;
     if (query.isAcknowledged !== undefined) filter.isAcknowledged = query.isAcknowledged;
@@ -269,7 +277,7 @@ export class AlertsService {
         .lean()
         .exec(),
       this.alertModel.countDocuments(filter).exec(),
-      this.alertModel.countDocuments({ ...( filter.imei ? { imei: filter.imei } : {}), isRead: false }).exec(),
+      this.alertModel.countDocuments({ ...(filter.$or ? { $or: filter.$or } : {}), isRead: false }).exec(),
     ]);
 
     return { alerts, total, unreadCount };
@@ -466,19 +474,20 @@ export class AlertsService {
         ? `Engine turned ON for ${deviceLabel}`
         : `Engine turned OFF for ${deviceLabel}`;
 
-      await Promise.all([
-        this.create(
-          device._id,
-          telemetry.imei,
-          type,
-          message,
-          telemetry.lat,
-          telemetry.lng,
-          telemetry.speed,
-          { deviceTime: telemetry.deviceTime },
-        ),
-        this.devicesService.recordIgnitionChange(telemetry.imei, telemetry.serverTime),
-      ]);
+      await this.create(
+        device._id,
+        telemetry.imei,
+        type,
+        message,
+        telemetry.lat,
+        telemetry.lng,
+        telemetry.speed,
+        { deviceTime: telemetry.deviceTime },
+      );
+
+      this.devicesService
+        .recordIgnitionChange(telemetry.imei, telemetry.serverTime)
+        .catch((err) => this.logger.error(`recordIgnitionChange failed: ${err}`));
 
       this.logger.log(`Ignition ${curr ? 'ON' : 'OFF'}: ${telemetry.imei}`);
     } catch (error) {
@@ -488,8 +497,82 @@ export class AlertsService {
 
   @OnEvent(GPS_DEVICE_DISCONNECTED)
   async handleDeviceDisconnected(data: { imei: string }): Promise<void> {
+    const lastIgnition = this.ignitionState.get(data.imei);
     // Clear ignition state on disconnect so next connect gets a fresh reading
     this.ignitionState.delete(data.imei);
+
+    // Device stopped transmitting with engine ON → treat disconnect as ENGINE_OFF
+    if (lastIgnition === true) {
+      try {
+        const device = await this.devicesService.getOrCreateDevice(data.imei);
+        const deviceLabel = device.plateNumber
+          ? `${device.name} (${device.plateNumber})`
+          : device.name;
+        await this.create(
+          device._id,
+          data.imei,
+          AlertType.ENGINE_OFF,
+          `Engine turned OFF for ${deviceLabel}`,
+          undefined,
+          undefined,
+          undefined,
+          { trigger: 'disconnect' },
+        );
+        this.logger.log(`ENGINE_OFF alert (disconnect): ${data.imei}`);
+      } catch (error) {
+        this.logger.error(`Error creating ENGINE_OFF alert on disconnect: ${error}`);
+      }
+    }
+  }
+
+  /**
+   * Runs every minute. For any device last tracked with engine ON that has been
+   * silent for STALE_ENGINE_MS, fire an ENGINE_OFF alert immediately rather than
+   * waiting up to 15 minutes for the TCP socket timeout to trigger the disconnect handler.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async detectStaleEngineOn(): Promise<void> {
+    if (this.ignitionState.size === 0) return;
+
+    const staleThreshold = new Date(Date.now() - this.STALE_ENGINE_MS);
+
+    for (const [imei, ignition] of this.ignitionState.entries()) {
+      if (!ignition) continue;
+
+      try {
+        const device = await this.deviceModel
+          .findOne({ imei })
+          .select('_id name plateNumber lastSeenAt isOnline')
+          .lean()
+          .exec();
+
+        if (!device) continue;
+        if (device.isOnline) continue;
+        if (device.lastSeenAt && new Date(device.lastSeenAt) > staleThreshold) continue;
+
+        // Device is offline and has been silent long enough — create ENGINE_OFF
+        this.ignitionState.set(imei, false);
+
+        const deviceLabel = device.plateNumber
+          ? `${device.name} (${device.plateNumber})`
+          : device.name;
+
+        await this.create(
+          device._id as Types.ObjectId,
+          imei,
+          AlertType.ENGINE_OFF,
+          `Engine turned OFF for ${deviceLabel}`,
+          undefined,
+          undefined,
+          undefined,
+          { trigger: 'stale' },
+        );
+
+        this.logger.log(`ENGINE_OFF alert (stale): ${imei}`);
+      } catch (error) {
+        this.logger.error(`ENGINE_OFF stale check failed for ${imei}: ${error}`);
+      }
+    }
   }
 
   @OnEvent(GPS_ALARM_EVENT)

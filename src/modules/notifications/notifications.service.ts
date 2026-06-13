@@ -9,9 +9,9 @@ import {
   NotificationType,
 } from '../../database/schemas/notification.schema';
 import { User, UserDocument } from '../../database/schemas/user.schema';
+import { Alert, AlertDocument } from '../../database/schemas/alert.schema';
 import { FcmService } from '../fcm/fcm.service';
 import { SendNotificationDto } from './dto';
-import { AlertsService } from '../alerts/alerts.service';
 import { AlertType } from '../../common/enums/alert-type.enum';
 
 @Injectable()
@@ -21,8 +21,8 @@ export class NotificationsService {
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Alert.name) private alertModel: Model<AlertDocument>,
     private readonly fcmService: FcmService,
-    private readonly alertsService: AlertsService,
   ) {}
 
   async send(dto: SendNotificationDto, adminId: string): Promise<NotificationDocument> {
@@ -77,16 +77,16 @@ export class NotificationsService {
     );
 
     // Save a copy in the alerts table so it appears in the notification inbox
-    await this.alertsService.create(
-      undefined,
-      undefined,
-      AlertType.SYSTEM_NOTIFICATION,
-      `${dto.title}: ${dto.body}`,
-      undefined,
-      undefined,
-      undefined,
-      { notificationId: record._id.toString(), type: dto.type, target },
-    );
+    try {
+      const alertDoc = await this.alertModel.create({
+        type: AlertType.SYSTEM_NOTIFICATION,
+        message: `${dto.title}: ${dto.body}`,
+        meta: { notificationId: record._id.toString(), type: dto.type, target },
+      });
+      this.logger.log(`System notification alert saved: ${alertDoc._id}`);
+    } catch (err) {
+      this.logger.error(`Failed to save system notification alert: ${err}`);
+    }
 
     return record;
   }
@@ -124,16 +124,11 @@ export class NotificationsService {
     }
 
     // Save in alerts table regardless of FCM success so it appears in the inbox
-    await this.alertsService.create(
-      undefined,
-      undefined,
-      AlertType.SYSTEM_NOTIFICATION,
-      `${title}: ${body}`,
-      undefined,
-      undefined,
-      undefined,
-      { type: NotificationType.PAYMENT_REMINDER, userId },
-    );
+    await this.alertModel.create({
+      type: AlertType.SYSTEM_NOTIFICATION,
+      message: `${title}: ${body}`,
+      meta: { type: NotificationType.PAYMENT_REMINDER, userId },
+    });
   }
 
   private async resolveTargetUsers(
