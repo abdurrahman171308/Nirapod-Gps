@@ -501,6 +501,7 @@ export class AlertsService {
     // Device stopped transmitting with engine ON → treat disconnect as ENGINE_OFF
     if (lastIgnition === true) {
       try {
+        const now = new Date();
         const device = await this.devicesService.getOrCreateDevice(data.imei);
         const deviceLabel = device.plateNumber
           ? `${device.name} (${device.plateNumber})`
@@ -515,6 +516,7 @@ export class AlertsService {
           undefined,
           { trigger: 'disconnect' },
         );
+        await this.devicesService.recordIgnitionChange(data.imei, now, false);
         this.logger.log(`ENGINE_OFF alert (disconnect): ${data.imei}`);
       } catch (error) {
         this.logger.error(`Error creating ENGINE_OFF alert on disconnect: ${error}`);
@@ -550,6 +552,7 @@ export class AlertsService {
         // Device is offline and has been silent long enough — create ENGINE_OFF
         this.ignitionState.set(imei, false);
 
+        const now = new Date();
         const deviceLabel = device.plateNumber
           ? `${device.name} (${device.plateNumber})`
           : device.name;
@@ -564,6 +567,7 @@ export class AlertsService {
           undefined,
           { trigger: 'stale' },
         );
+        await this.devicesService.recordIgnitionChange(imei, now, false);
 
         this.logger.log(`ENGINE_OFF alert (stale): ${imei}`);
       } catch (error) {
