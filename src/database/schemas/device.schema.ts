@@ -58,6 +58,12 @@ export class Device {
   @Prop()
   lastIgnitionChangedAt?: Date;
 
+  @Prop()
+  lastEngineOnAt?: Date;
+
+  @Prop()
+  lastEngineOffAt?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }

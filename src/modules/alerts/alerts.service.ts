@@ -208,19 +208,15 @@ export class AlertsService {
     query: AlertQueryDto,
     user: UserContext,
   ): Promise<{ alerts: any[]; total: number }> {
-    const assignedImeis = await this.devicesService.getAssignedImeis(
-      user.userId,
-    );
+    const assignedImeis = await this.devicesService.getAssignedImeis(user.userId);
 
-    if (assignedImeis.length === 0) {
-      return { alerts: [], total: 0 };
-    }
+    const orClauses: any[] = [{ type: AlertType.SYSTEM_NOTIFICATION }];
+    if (assignedImeis.length > 0) orClauses.push({ imei: { $in: assignedImeis } });
 
-    const filter: any = { imei: { $in: assignedImeis } };
+    const filter: any = { $or: orClauses };
 
     if (query.type) filter.type = query.type;
-    if (query.isAcknowledged !== undefined)
-      filter.isAcknowledged = query.isAcknowledged;
+    if (query.isAcknowledged !== undefined) filter.isAcknowledged = query.isAcknowledged;
     if (query.from || query.to) {
       filter.createdAt = {};
       if (query.from) filter.createdAt.$gte = new Date(query.from);
@@ -487,7 +483,7 @@ export class AlertsService {
       );
 
       this.devicesService
-        .recordIgnitionChange(telemetry.imei, telemetry.serverTime)
+        .recordIgnitionChange(telemetry.imei, telemetry.serverTime, curr)
         .catch((err) => this.logger.error(`recordIgnitionChange failed: ${err}`));
 
       this.logger.log(`Ignition ${curr ? 'ON' : 'OFF'}: ${telemetry.imei}`);

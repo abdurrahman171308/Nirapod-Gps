@@ -290,8 +290,14 @@ export class DevicesService {
     await this.deviceModel.updateOne({ imei }, { isEngineCut });
   }
 
-  async recordIgnitionChange(imei: string, at: Date): Promise<void> {
-    await this.deviceModel.updateOne({ imei }, { lastIgnitionChangedAt: at });
+  async recordIgnitionChange(imei: string, at: Date, isOn: boolean): Promise<void> {
+    const update: Record<string, unknown> = { lastIgnitionChangedAt: at };
+    if (isOn) {
+      update.lastEngineOnAt = at;
+    } else {
+      update.lastEngineOffAt = at;
+    }
+    await this.deviceModel.updateOne({ imei }, update);
   }
 
   async getOrCreateDevice(imei: string): Promise<DeviceDocument> {

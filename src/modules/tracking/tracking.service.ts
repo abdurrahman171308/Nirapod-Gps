@@ -22,6 +22,8 @@ interface LiveDeviceState {
   lastSeenAt?: Date | null;
   lastIgnition?: boolean;
   lastIgnitionAt?: Date | null;
+  lastEngineOnAt?: Date | null;
+  lastEngineOffAt?: Date | null;
 }
 
 interface LiveLocationSnapshot {
@@ -60,7 +62,8 @@ export class TrackingService {
           plateNumber: device.plateNumber,
           isOnline,
           engineOn: liveLocation ? (liveLocation.ignition ?? null) : null,
-          lastSeenAt: device.lastIgnitionChangedAt ?? null,
+          engineOnAt: device.lastEngineOnAt ?? null,
+          engineOffAt: device.lastEngineOffAt ?? null,
           latestLocation: liveLocation,
         };
       }),
@@ -83,7 +86,8 @@ export class TrackingService {
     return {
       imei,
       isOnline,
-      lastSeenAt: device.lastIgnitionChangedAt ?? null,
+      engineOnAt: device.lastEngineOnAt ?? null,
+      engineOffAt: device.lastEngineOffAt ?? null,
       latestLocation: this.buildLiveLocation(latestLocation, device, isOnline),
     };
   }
